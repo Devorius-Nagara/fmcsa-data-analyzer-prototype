@@ -30,6 +30,10 @@
   const uploads = UPLOADS[c.dot] || [];
   const inspections = getInspectionsForCompany(c.dot);
   const violations = getViolationsForCompany(c.dot);
+  const crashes = CRASHES[c.dot] || [];
+  const insuranceHistory = INSURANCE_HISTORY[c.dot] || [];
+  const smsBasics = SMS_BASICS[c.dot] || [];
+  const scoreHistory = SCORE_HISTORY[c.dot] || [];
 
   /* center (90,100), radius 76, semicircle from (14,100) at 0 to (166,100) at 100 */
   function gaugeArcEnd(score) {
@@ -174,7 +178,89 @@
       </table>`;
   }
 
+  // ---------- Crashes tab ----------
+  function crashesPanel() {
+    if (!c.hasDetail) return `<div class="empty-state">No detailed crash records in this demo dataset for a non-flagship company.</div>`;
+    if (!crashes.length) return `<div class="empty-state">No crashes on file for ${c.name} in the last 24 months.</div>`;
+    return `
+      <div style="display:flex; flex-direction:column; gap:1px; background:#e1e0d9;">
+        ${crashes.map(cr => `
+        <div class="card" style="border-radius:0; padding:12px 16px; display:flex; flex-direction:column; gap:6px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+            <div style="font-weight:600; font-size:13px;">${fmtDate(cr.date)} ${cr.time} · ${cr.location}</div>
+            <div style="display:flex; gap:6px;">
+              ${cr.fatalities ? `<span class="pill pill-critical">${cr.fatalities} fatal</span>` : ''}
+              ${cr.injured ? `<span class="pill pill-elevated">${cr.injured} injured</span>` : ''}
+              ${cr.towAway ? `<span class="pill pill-info">Tow-away</span>` : ''}
+            </div>
+          </div>
+          <div style="font-size:12px; color:#52514e;">${cr.road} · ${cr.county} County · ${cr.vehicles} vehicle${cr.vehicles === 1 ? '' : 's'}</div>
+          <div style="font-size:12px; color:#52514e;">${cr.weather} · ${cr.lighting} · ${cr.surface}${cr.roadway ? ' · ' + cr.roadway : ''}</div>
+          <div style="font-size:11.5px; color:#898781;">Sequence: ${cr.sequence} · Reported by ${cr.reportedBy}</div>
+        </div>`).join('')}
+      </div>`;
+  }
+
+  // ---------- Insurance tab ----------
+  function insurancePanel() {
+    if (!c.hasDetail) return `<div class="empty-state">No detailed insurance history in this demo dataset for a non-flagship company.</div>`;
+    if (!insuranceHistory.length) return `<div class="empty-state">No insurance filings on file for ${c.name}.</div>`;
+    return `
+      <div style="display:flex; flex-direction:column; gap:10px; padding:14px 16px;">
+        ${insuranceHistory.map(p => `
+        <div class="card" style="padding:12px 16px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+          <div>
+            <div style="font-weight:600; font-size:13px;">${p.insurer}</div>
+            <div style="font-size:11.5px; color:#898781; margin-top:2px;" class="mono">${p.policyNum} · Coverage $0 – ${p.coverageMax.toLocaleString('en-US')}</div>
+            <div style="font-size:11.5px; color:#52514e; margin-top:2px;">${fmtDate(p.from)} → ${p.to ? fmtDate(p.to) : '—'}${p.reason ? ' · ' + p.reason : ''}</div>
+          </div>
+          <span class="pill ${p.status === 'Active' ? 'pill-minimal' : 'pill-info'}">${p.status}</span>
+        </div>`).join('')}
+      </div>`;
+  }
+
+  // ---------- SMS BASIC tab ----------
+  function smsBasicPanel() {
+    if (!c.hasDetail) return `<div class="empty-state">No official SMS BASIC data in this demo dataset for a non-flagship company.</div>`;
+    if (!smsBasics.length) return `<div class="empty-state">No SMS BASIC data on file for ${c.name}.</div>`;
+    return `
+      <table>
+        <thead><tr><th>BASIC category</th><th>Measure</th><th>Inspections</th><th>Violations</th></tr></thead>
+        <tbody>
+          ${smsBasics.map(b => `
+          <tr>
+            <td style="font-weight:600;">${b.category}</td>
+            <td class="mono">${b.measure.toFixed(2)}</td>
+            <td class="mono">${b.inspections}</td>
+            <td class="mono">${b.violations}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+      <div style="padding:12px 16px; font-size:11.5px; color:#898781; border-top:1px solid #e1e0d9;">Official FMCSA SMS measures — separate from the internal CarrierIntel-style score below.</div>`;
+  }
+
   // ---------- Risk score tab ----------
+  function scoreTrendSvg() {
+    if (scoreHistory.length < 2) return '';
+    const w = 380, h = 70, pad = 4;
+    const min = Math.min(...scoreHistory), max = Math.max(...scoreHistory);
+    const range = Math.max(1, max - min);
+    const pts = scoreHistory.map((v, i) => {
+      const x = pad + (i / (scoreHistory.length - 1)) * (w - pad * 2);
+      const y = h - pad - ((v - min) / range) * (h - pad * 2);
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    });
+    const last = pts[pts.length - 1].split(',');
+    return `
+      <div style="max-width:380px; margin:0 auto; width:100%;">
+        <div style="font-size:11px; color:#898781; margin-bottom:4px;">12-month trend</div>
+        <svg width="100%" height="${h}" viewBox="0 0 ${w} ${h}">
+          <polyline points="${pts.join(' ')}" fill="none" stroke="${tierColor}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="${last[0]}" cy="${last[1]}" r="3.5" fill="${tierColor}"/>
+        </svg>
+      </div>`;
+  }
+
   function riskScorePanel() {
     return `
       <div style="display:flex; flex-direction:column; gap:14px; padding:16px;">
@@ -186,6 +272,7 @@
             <text x="90" y="99" text-anchor="middle" font-family="IBM Plex Sans, sans-serif" font-size="10" fill="#898781">of 100</text>
           </svg>
         </div>
+        ${scoreTrendSvg()}
         <div style="display:flex; flex-direction:column; gap:10px; max-width:380px; margin:0 auto; width:100%;">
           ${bar('OOS rate', Math.min(100, c.oosRate / 35 * 100), c.oosRate.toFixed(1) + '%')}
           ${bar('Violations / inspection', Math.min(100, c.violPerInspection / 1.2 * 100), c.violPerInspection.toFixed(2))}
@@ -203,6 +290,9 @@
   const TABS = [
     { key: 'inspections', label: 'Inspections', count: inspections.length, render: inspectionsPanel },
     { key: 'violations', label: 'Violations', count: violations.length, render: violationsPanel },
+    { key: 'crashes', label: 'Crashes', count: c.hasDetail ? crashes.length : null, render: crashesPanel },
+    { key: 'insurance', label: 'Insurance', count: c.hasDetail ? insuranceHistory.length : null, render: insurancePanel },
+    { key: 'sms', label: 'SMS BASIC', count: c.hasDetail ? smsBasics.length : null, render: smsBasicPanel },
     { key: 'tickets', label: 'Tickets', count: c.hasDetail ? tickets.length : null, render: ticketsPanel },
     { key: 'uploads', label: 'Uploads', count: c.hasDetail ? uploads.length : null, render: uploadsPanel },
     { key: 'risk', label: 'Risk Score', count: null, render: riskScorePanel },
@@ -248,6 +338,31 @@
             <span class="pill ${tier.cls}">${icon(tierIcon, { size: 11, stroke: tierColor, sw: 2.5 })} ${tier.label}</span>
           </div>
         </div>
+      </div>
+    </div>
+
+    <div class="card" style="padding:16px 20px; display:grid; grid-template-columns:repeat(5, minmax(0,1fr)); gap:18px;">
+      <div class="kv">
+        <span class="k">Authority since</span><span class="v" style="font-size:12.5px;">${fmtDate(c.authoritySince)}</span>
+        <span class="k" style="margin-top:6px;">MCS-150</span><span class="v" style="font-size:12.5px;">${fmtDate(c.mcs150Date)} · ${fmtMiles(c.mcs150Miles)} mi</span>
+        <span class="k" style="margin-top:6px;">Fleet</span><span class="v" style="font-size:12.5px;">${c.fleet.units} units · ${c.fleet.trailers} trailers · ${c.fleet.drivers} drivers</span>
+      </div>
+      <div class="kv">
+        <span class="k">Physical address</span><span class="v" style="font-size:12.5px;">${c.address}</span>
+        <span class="k" style="margin-top:6px;">Mailing</span><span class="v" style="font-size:12.5px;">${c.mailingAddress}</span>
+      </div>
+      <div class="kv">
+        <span class="k">Phone</span><span class="v" style="font-size:12.5px;">${c.phone}</span>
+        <span class="k" style="margin-top:6px;">Email</span><span class="v" style="font-size:12.5px;">${c.email}</span>
+      </div>
+      <div class="kv">
+        <span class="k">Primary officer</span><span class="v" style="font-size:12.5px;">${c.officerName}</span>
+        <span class="k" style="margin-top:6px;">Title</span><span class="v" style="font-size:12.5px;">${c.officerTitle}</span>
+      </div>
+      <div class="kv">
+        <span class="k">Operation</span><span class="v" style="font-size:12.5px;">${c.operationClassification}</span>
+        <span class="k" style="margin-top:6px;">Specialty</span><span class="v" style="font-size:12.5px;">${c.specialty}</span>
+        <span class="k" style="margin-top:6px;">Cargo types</span><span class="v" style="font-size:12.5px; font-weight:400;">${c.cargoTypes.join(', ')}</span>
       </div>
     </div>
 
