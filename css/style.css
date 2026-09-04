@@ -102,6 +102,12 @@ tr.row-link:hover { background: #f4f3f0; }
 .chev { transition: transform .15s ease; flex-shrink: 0; }
 .chev.open { transform: rotate(90deg); }
 
+.copy-btn {
+  display: inline-flex; align-items: center; justify-content: center; padding: 2px; margin-left: 2px;
+  border: none; background: none; cursor: pointer; border-radius: 4px; vertical-align: middle;
+}
+.copy-btn:hover { background: #e9e8e3; }
+
 .pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
 .pill-minimal { background: rgba(12,163,12,0.14); color: #0a6b0a; }
 .pill-elevated { background: rgba(250,178,25,0.20); color: #946400; }

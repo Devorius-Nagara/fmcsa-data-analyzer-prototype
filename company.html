@@ -55,16 +55,32 @@
     return icon(ICONS.chevronDown, { size: 14, stroke: '#898781', sw: 2.5, class: `chev${open ? ' open' : ''}` });
   }
 
+  function copyBtn(text) {
+    return `<button type="button" class="copy-btn" data-copy="${text}" title="Copy" onclick="event.stopPropagation(); copyToClipboard(this)">${icon(ICONS.copy, { size: 12.5, stroke: '#898781', sw: 2 })}</button>`;
+  }
+
+  function vehicleMeta(v, date, dot) {
+    const upload = uploadOnDate(dot, date);
+    return `
+      <div style="display:flex; flex-direction:column; gap:5px; font-size:12px; color:#52514e; min-width:220px;">
+        <div>Truck <b style="color:#0b0b0b;">${v.truckNumber}</b> <span class="mono" style="color:#0b0b0b;">${v.truckVin}</span> ${copyBtn(v.truckVin)}</div>
+        <div>Trailer <b style="color:#0b0b0b;">${v.trailerNumber}</b> <span class="mono" style="color:#0b0b0b;">${v.trailerVin}</span> ${copyBtn(v.trailerVin)}</div>
+        <div>FMCSA upload that day: ${upload
+          ? `<span class="pill ${upload.status === 'success' ? 'pill-minimal' : 'pill-critical'}" style="font-size:10.5px; padding:2px 8px;">${upload.status === 'success' ? 'Yes' : 'Failed'}</span>`
+          : `<span class="pill pill-info" style="font-size:10.5px; padding:2px 8px;">No upload on file</span>`}</div>
+      </div>`;
+  }
+
   // ---------- Inspections tab (expandable rows) ----------
   function inspectionsPanel() {
     if (!inspections.length) return `<div class="empty-state">No inspection records in this demo dataset.</div>`;
     return `
       <table>
-        <thead><tr><th></th><th>Date</th><th>Level</th><th>State</th><th>Violations</th><th>Tampering</th><th>OOS</th></tr></thead>
+        <thead><tr><th style="width:24px;"></th><th>Date</th><th>Level</th><th>State</th><th>Violations</th><th>Tampering</th><th>OOS</th></tr></thead>
         <tbody>
           ${inspections.map(i => `
           <tr class="exp-row" data-toggle="insp-${i.id}">
-            <td style="width:24px;">${chev(false)}</td>
+            <td>${chev(false)}</td>
             <td class="mono" style="color:#52514e;">${fmtDate(i.date)}</td>
             <td>${i.level}</td>
             <td>${i.state}</td>
@@ -75,13 +91,15 @@
           <tr class="exp-panel-row" id="panel-insp-${i.id}" hidden>
             <td colspan="7">
               <div class="exp-panel-inner">
-                <div style="display:flex; gap:24px; flex-wrap:wrap; font-size:12px; color:#52514e;">
-                  <span>Location: <b style="color:#0b0b0b;">${i.location}</b></span>
-                  <span>Vehicle: <b class="mono" style="color:#0b0b0b;">${i.vehicle}</b></span>
-                  <span>Provider: <b style="color:#0b0b0b;">${provider ? provider.name : '—'}</b></span>
+                <div style="display:flex; gap:28px; flex-wrap:wrap;">
+                  <div style="font-size:12px; color:#52514e; min-width:180px;">
+                    <div>Location: <b style="color:#0b0b0b;">${i.location}</b></div>
+                    <div style="margin-top:5px;">Provider: <b style="color:#0b0b0b;">${provider ? provider.name : '—'}</b></div>
+                  </div>
+                  ${vehicleMeta(i.vehicle, i.date, i.dot)}
                 </div>
                 ${i.violations.length ? `
-                <table style="font-size:12px; background:#fcfcfb; border-radius:8px; overflow:hidden;">
+                <table style="font-size:12.5px;">
                   <thead><tr><th>Code</th><th>Description</th><th>BASIC</th><th>Severity</th><th>OOS</th></tr></thead>
                   <tbody>
                     ${i.violations.map(v => `
@@ -194,7 +212,7 @@
               ${cr.towAway ? `<span class="pill pill-info">Tow-away</span>` : ''}
             </div>
           </div>
-          <div style="font-size:12px; color:#52514e;">${cr.road} · ${cr.county} County · ${cr.vehicles} vehicle${cr.vehicles === 1 ? '' : 's'}</div>
+          <div style="font-size:12px; color:#52514e;">${cr.road} · ${cr.county} County · ${cr.vehicles} vehicle${cr.vehicles === 1 ? '' : 's'}${cr.vehicle ? ` · Truck ${cr.vehicle.truckNumber}` : ''}${cr.vehicle ? ` <span class="mono" style="color:#0b0b0b;">${cr.vehicle.truckVin}</span> ${copyBtn(cr.vehicle.truckVin)}` : ''}</div>
           <div style="font-size:12px; color:#52514e;">${cr.weather} · ${cr.lighting} · ${cr.surface}${cr.roadway ? ' · ' + cr.roadway : ''}</div>
           <div style="font-size:11.5px; color:#898781;">Sequence: ${cr.sequence} · Reported by ${cr.reportedBy}</div>
         </div>`).join('')}

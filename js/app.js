@@ -21,7 +21,24 @@ const ICONS = {
   logo: '<path d="M3 12l4-7h10l4 7-4 7H7z"/><path d="M9 12h6M12 9v6"/>',
   grid: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/>',
   layers: '<path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>',
+  list: '<path d="M8 6h13M8 12h13M8 18h13"/><circle cx="3.5" cy="6" r="1.5"/><circle cx="3.5" cy="12" r="1.5"/><circle cx="3.5" cy="18" r="1.5"/>',
+  copy: '<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/>',
 };
+
+/* Copies a data-copy attribute's value to the clipboard and briefly swaps the button icon for a check mark. */
+function copyToClipboard(btn) {
+  const text = btn.dataset.copy;
+  const done = () => {
+    const original = btn.innerHTML;
+    btn.innerHTML = icon(ICONS.check, { size: 12.5, stroke: '#0a6b0a', sw: 2.5 });
+    setTimeout(() => { btn.innerHTML = original; }, 1200);
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(done).catch(done);
+  } else {
+    done();
+  }
+}
 
 function topbar() {
   return `
@@ -85,14 +102,7 @@ function sidebarHTML() {
     <div class="sidebar-section">
       <a class="sidebar-link ${active('index.html')}" href="index.html">${icon(ICONS.grid, { size: 16, stroke: activeStroke('index.html') })} Dashboard</a>
       <a class="sidebar-link ${active('providers.html')}" href="providers.html">${icon(ICONS.layers, { size: 16, stroke: activeStroke('providers.html') })} Providers</a>
-    </div>
-
-    <div class="sidebar-section">
-      <div class="sidebar-label">Jump to company</div>
-      <div class="sidebar-search-wrap">
-        <input class="sidebar-search-input" id="sidebar-company-search" type="text" placeholder="Search company or DOT" autocomplete="off">
-        <div class="sidebar-search-results" id="sidebar-company-results" hidden></div>
-      </div>
+      <a class="sidebar-link ${active('companies.html')}" href="companies.html">${icon(ICONS.list, { size: 16, stroke: activeStroke('companies.html') })} Company</a>
     </div>
 
     <div class="sidebar-section">
@@ -108,24 +118,6 @@ function sidebarHTML() {
 function mountSidebar(el) {
   el.className = 'sidebar';
   el.innerHTML = sidebarHTML();
-
-  const input = el.querySelector('#sidebar-company-search');
-  const results = el.querySelector('#sidebar-company-results');
-  if (!input) return;
-
-  function runSearch() {
-    const q = input.value.trim().toLowerCase();
-    if (!q) { results.hidden = true; results.innerHTML = ''; return; }
-    const matches = COMPANIES.filter(c => c.name.toLowerCase().includes(q) || c.dot.includes(q)).slice(0, 8);
-    results.innerHTML = matches.length
-      ? matches.map(c => `<a href="company.html?dot=${c.dot}">${c.name} <span class="mono" style="color:#898781;">· ${c.dot}</span></a>`).join('')
-      : `<div class="hint">No matches</div>`;
-    results.hidden = false;
-  }
-
-  input.addEventListener('input', runSearch);
-  input.addEventListener('focus', () => { if (input.value.trim()) runSearch(); });
-  document.addEventListener('click', (e) => { if (!el.contains(e.target)) results.hidden = true; });
 }
 
 document.addEventListener('DOMContentLoaded', () => {

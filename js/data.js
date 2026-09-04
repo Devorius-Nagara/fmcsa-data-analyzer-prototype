@@ -120,85 +120,94 @@ const UPLOADS = {
   ],
 };
 
+/* Full truck+trailer VIN pairs, keyed by truck number, referenced from inspections and crashes. */
+const VEHICLES = {
+  '482': { truckNumber: '#482', truckVin: '1FUJGLDR8LLJ84821', trailerNumber: '#217T', trailerVin: '1RNF53A27NR091482' },
+  '118': { truckNumber: '#118', truckVin: '3AKJHHDR9KSLD1190', trailerNumber: '#118T', trailerVin: '1RNF53A29PR061190' },
+  '205': { truckNumber: '#205', truckVin: '3AKJHHDR2LSLN2207', trailerNumber: '#205T', trailerVin: '1RNF53A21PR062207' },
+  '310': { truckNumber: '#310', truckVin: '2FZHATDC85AN95590', trailerNumber: '#310T', trailerVin: '1RNF53A25PR065310' },
+  '041': { truckNumber: '#041', truckVin: '1XPWDB9X5JD417712', trailerNumber: '#041T', trailerVin: '1RNF53A20PR060041' },
+};
+
 /* Each inspection belongs to one company (dot) and carries its own violations. */
 const INSPECTIONS = [
   // Company 3 — 4158910
   { id: 'VA-2026-118834', dot: '4158910', date: '2026-09-01', level: 'Level I — Full', state: 'VA',
-    location: 'I-81 MM 118, Weigh Station', vehicle: 'VIN 1FUJGL...4821 · Truck #482', oos: true,
+    location: 'I-81 MM 118, Weigh Station', vehicle: VEHICLES['482'], oos: true,
     violations: [
       { id: 'v1', code: '395.8',  desc: 'ELD tampering / falsified device data', basic: 'Hours-of-Service Compliance', severity: 8, oos: true,  type: 'ELD tampering',   source: 'preliminary' },
       { id: 'v2', code: '395.22', desc: 'No current record of duty status',      basic: 'Hours-of-Service Compliance', severity: 4, oos: false, type: 'Log falsification', source: 'preliminary' },
     ] },
   { id: 'NC-2026-098213', dot: '4158910', date: '2026-08-22', level: 'Level II — Walk-Around', state: 'NC',
-    location: 'US-29, Roadside', vehicle: 'VIN 1FUJGL...4821 · Truck #482', oos: false,
+    location: 'US-29, Roadside', vehicle: VEHICLES['482'], oos: false,
     violations: [
       { id: 'v3', code: '395.8', desc: 'ELD tampering / falsified device data', basic: 'Hours-of-Service Compliance', severity: 6, oos: false, type: 'ELD tampering', source: 'preliminary' },
     ] },
   { id: 'VA-2026-077651', dot: '4158910', date: '2026-08-03', level: 'Level I — Full', state: 'VA',
-    location: 'I-81 MM 118, Weigh Station', vehicle: 'VIN 1FUJGL...4821 · Truck #482', oos: false, violations: [] },
+    location: 'I-81 MM 118, Weigh Station', vehicle: VEHICLES['482'], oos: false, violations: [] },
   { id: 'VA-2026-041002', dot: '4158910', date: '2026-07-02', level: 'Level I — Full', state: 'VA',
-    location: 'I-81 MM 96, Weigh Station', vehicle: 'VIN 1FUJGL...4821 · Truck #482', oos: false,
+    location: 'I-81 MM 96, Weigh Station', vehicle: VEHICLES['482'], oos: false,
     violations: [
       { id: 'v4', code: '395.8', desc: 'ELD tampering / falsified device data', basic: 'Hours-of-Service Compliance', severity: 5, oos: false, type: 'ELD tampering', source: 'official' },
     ] },
 
   // Company 1 — 1902244
   { id: 'TX-2026-330091', dot: '1902244', date: '2026-08-29', level: 'Level I — Full', state: 'TX',
-    location: 'I-35 MM 212, Weigh Station', vehicle: 'VIN 3AKJHHDR...1190 · Truck #118', oos: true,
+    location: 'I-35 MM 212, Weigh Station', vehicle: VEHICLES['118'], oos: true,
     violations: [
       { id: 'v5', code: '395.8', desc: 'ELD tampering / falsified device data', basic: 'Hours-of-Service Compliance', severity: 9, oos: true, type: 'ELD tampering', source: 'preliminary' },
       { id: 'v6', code: '396.9', desc: 'Brake out of adjustment',               basic: 'Vehicle Maintenance',          severity: 7, oos: true, type: 'Vehicle defect', source: 'preliminary' },
     ] },
   { id: 'TX-2026-311204', dot: '1902244', date: '2026-08-14', level: 'Level I — Full', state: 'TX',
-    location: 'I-10 MM 754, Weigh Station', vehicle: 'VIN 3AKJHHDR...2207 · Truck #205', oos: true,
+    location: 'I-10 MM 754, Weigh Station', vehicle: VEHICLES['205'], oos: true,
     violations: [
       { id: 'v7', code: '395.8', desc: 'ELD tampering / falsified device data', basic: 'Hours-of-Service Compliance', severity: 8, oos: true, type: 'ELD tampering', source: 'preliminary' },
     ] },
   { id: 'OK-2026-208871', dot: '1902244', date: '2026-07-30', level: 'Level II — Walk-Around', state: 'OK',
-    location: 'US-75, Roadside', vehicle: 'VIN 3AKJHHDR...1190 · Truck #118', oos: false,
+    location: 'US-75, Roadside', vehicle: VEHICLES['118'], oos: false,
     violations: [
       { id: 'v8', code: '395.8', desc: 'ELD tampering / falsified device data', basic: 'Hours-of-Service Compliance', severity: 6, oos: false, type: 'ELD tampering', source: 'official' },
     ] },
 
   // Company 2 — 2076111
   { id: 'TX-2026-298001', dot: '2076111', date: '2026-08-25', level: 'Level I — Full', state: 'TX',
-    location: 'I-20 MM 445, Weigh Station', vehicle: 'VIN 2FZHATD...5590 · Truck #310', oos: true,
+    location: 'I-20 MM 445, Weigh Station', vehicle: VEHICLES['310'], oos: true,
     violations: [
       { id: 'v9', code: '395.8', desc: 'ELD tampering / falsified device data', basic: 'Hours-of-Service Compliance', severity: 7, oos: true, type: 'ELD tampering', source: 'preliminary' },
     ] },
   { id: 'TX-2026-276650', dot: '2076111', date: '2026-08-05', level: 'Level I — Full', state: 'TX',
-    location: 'I-20 MM 445, Weigh Station', vehicle: 'VIN 2FZHATD...5590 · Truck #310', oos: false, violations: [] },
+    location: 'I-20 MM 445, Weigh Station', vehicle: VEHICLES['310'], oos: false, violations: [] },
 
   // Company 5 — 3075935 (clean record)
   { id: 'OH-2026-190044', dot: '3075935', date: '2026-08-15', level: 'Level I — Full', state: 'OH',
-    location: 'I-75 MM 201, Weigh Station', vehicle: 'VIN 1XPWD...7712 · Truck #041', oos: false, violations: [] },
+    location: 'I-75 MM 201, Weigh Station', vehicle: VEHICLES['041'], oos: false, violations: [] },
   { id: 'OH-2026-165320', dot: '3075935', date: '2026-07-20', level: 'Level II — Walk-Around', state: 'OH',
-    location: 'US-42, Roadside', vehicle: 'VIN 1XPWD...7712 · Truck #041', oos: false, violations: [] },
+    location: 'US-42, Roadside', vehicle: VEHICLES['041'], oos: false, violations: [] },
 ];
 
 /* Crash records — FMCSA MCMIS-style fields. */
 const CRASHES = {
   '1902244': [
-    { date: '2026-08-11', time: '14:22', location: 'GRAND PRAIRIE, TX', road: 'I-30', county: 'Dallas', vehicles: 2,
+    { date: '2026-08-11', time: '14:22', location: 'GRAND PRAIRIE, TX', road: 'I-30', county: 'Dallas', vehicles: 2, vehicle: VEHICLES['118'],
       weather: 'No adverse conditions', lighting: 'Daylight', surface: 'Dry', roadway: 'Two-way, divided, unprotected median',
       sequence: '1:20:COLLISION INVOLVING OTHER MOVABLE OBJECT', reportedBy: 'DALLAS PD', towAway: true, injured: 1, fatalities: 1 },
-    { date: '2026-05-03', time: '06:40', location: 'WACO, TX', road: 'I-35', county: 'McLennan', vehicles: 1,
+    { date: '2026-05-03', time: '06:40', location: 'WACO, TX', road: 'I-35', county: 'McLennan', vehicles: 1, vehicle: VEHICLES['205'],
       weather: 'Rain', lighting: 'Dark – not lighted', surface: 'Wet',
       sequence: '1:18:COLLISION INVOLVING FIXED OBJECT', reportedBy: 'TEXAS DPS', towAway: true, injured: 0, fatalities: 0 },
-    { date: '2025-11-19', time: '17:05', location: 'AUSTIN, TX', road: 'US-183', county: 'Travis', vehicles: 2,
+    { date: '2025-11-19', time: '17:05', location: 'AUSTIN, TX', road: 'US-183', county: 'Travis', vehicles: 2, vehicle: VEHICLES['118'],
       weather: 'No adverse conditions', lighting: 'Daylight', surface: 'Dry',
       sequence: '1:20:COLLISION INVOLVING OTHER MOVABLE OBJECT', reportedBy: 'AUSTIN PD', towAway: false, injured: 1, fatalities: 0 },
   ],
   '2076111': [
-    { date: '2026-06-27', time: '09:12', location: 'ARLINGTON, TX', road: 'I-20', county: 'Tarrant', vehicles: 2,
+    { date: '2026-06-27', time: '09:12', location: 'ARLINGTON, TX', road: 'I-20', county: 'Tarrant', vehicles: 2, vehicle: VEHICLES['310'],
       weather: 'No adverse conditions', lighting: 'Daylight', surface: 'Dry',
       sequence: '1:20:COLLISION INVOLVING OTHER MOVABLE OBJECT', reportedBy: 'ARLINGTON PD', towAway: true, injured: 0, fatalities: 0 },
   ],
   '4158910': [
-    { date: '2026-07-14', time: '22:31', location: 'ROANOKE, VA', road: 'I-81', county: 'Roanoke', vehicles: 2,
+    { date: '2026-07-14', time: '22:31', location: 'ROANOKE, VA', road: 'I-81', county: 'Roanoke', vehicles: 2, vehicle: VEHICLES['482'],
       weather: 'No adverse conditions', lighting: 'Dark – not lighted', surface: 'Dry',
       sequence: '1:20:COLLISION INVOLVING OTHER MOVABLE OBJECT', reportedBy: 'VIRGINIA STATE POLICE', towAway: true, injured: 0, fatalities: 0 },
-    { date: '2025-09-30', time: '05:52', location: 'GREENSBORO, NC', road: 'I-40', county: 'Guilford', vehicles: 1,
+    { date: '2025-09-30', time: '05:52', location: 'GREENSBORO, NC', road: 'I-40', county: 'Guilford', vehicles: 1, vehicle: VEHICLES['482'],
       weather: 'Fog', lighting: 'Dark – not lighted', surface: 'Wet',
       sequence: '1:18:COLLISION INVOLVING FIXED OBJECT', reportedBy: 'NC HIGHWAY PATROL', towAway: true, injured: 0, fatalities: 0 },
   ],
@@ -292,3 +301,8 @@ function fmtDate(iso) {
   return `${m}/${d}/${y}`;
 }
 function fmtMiles(n) { return n.toLocaleString('en-US'); }
+/* Was there an FMCSA ELD data upload on the same calendar day as `date` (YYYY-MM-DD)? */
+function uploadOnDate(dot, date) {
+  const list = UPLOADS[dot] || [];
+  return list.find(u => u.datetime.startsWith(date)) || null;
+}
