@@ -8,7 +8,9 @@
 </head>
 <body>
 <div data-topbar></div>
-
+<div class="app-shell">
+  <div data-sidebar></div>
+  <div class="main-content">
 <div class="page">
   <div id="back"></div>
 
@@ -59,11 +61,12 @@
   </div>
 </div>
 
+  </div>
+</div>
+
 <script src="js/data.js"></script>
 <script src="js/app.js"></script>
 <script>
-  document.getElementById('back').innerHTML = backLink('index.html', 'Back to dashboard');
-
   let currentPeriod = '30d';
   let currentState = qs('state') || 'TX';
 
@@ -77,6 +80,11 @@
     const total = list.reduce((s, x) => s + x.count, 0);
     const top = list[0];
     const stateObj = list.find(s => s.code === currentState) || top;
+
+    document.getElementById('back').innerHTML = breadcrumb([
+      { label: 'Dashboard', href: 'index.html' },
+      { label: `${stateObj.name} (${stateObj.code})` },
+    ]);
 
     document.getElementById('tiles').innerHTML = `
       <div class="card" style="padding:20px;">

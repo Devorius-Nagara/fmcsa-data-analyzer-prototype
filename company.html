@@ -8,8 +8,13 @@
 </head>
 <body>
 <div data-topbar></div>
-
+<div class="app-shell">
+  <div data-sidebar></div>
+  <div class="main-content">
 <div class="page" id="page"></div>
+
+  </div>
+</div>
 
 <script src="js/data.js"></script>
 <script src="js/app.js"></script>
@@ -18,33 +23,145 @@
   const c = getCompany(dot) || COMPANIES[0];
   const provider = getProvider(c.provider);
   const tier = scoreTier(c.score);
+  const tierColor = { Minimal: '#0ca30c', Elevated: '#fab219', Critical: '#d03b3b' }[tier.label];
+  const tierIcon = { Minimal: ICONS.check, Elevated: ICONS.warn, Critical: ICONS.warn }[tier.label];
 
   const tickets = TICKETS[c.dot] || [];
   const uploads = UPLOADS[c.dot] || [];
   const inspections = getInspectionsForCompany(c.dot);
   const violations = getViolationsForCompany(c.dot);
 
-  function ticketsSection() {
-    if (!c.hasDetail) return `<div class="empty-state">No detailed ticket history in this demo dataset for a non-flagship company.</div>`;
+  /* center (90,100), radius 76, semicircle from (14,100) at 0 to (166,100) at 100 */
+  function gaugeArcEnd(score) {
+    const f = Math.max(0, Math.min(1, score / 100));
+    const angle = f * Math.PI;
+    return { x: (90 - 76 * Math.cos(angle)).toFixed(1), y: (100 - 76 * Math.sin(angle)).toFixed(1) };
+  }
+  const end = gaugeArcEnd(c.score);
+
+  function bar(label, value, display) {
     return `
-      <table style="font-size:13px;">
-        <thead><tr><th>Subject</th><th>Status</th><th>Date</th></tr></thead>
+      <div>
+        <div style="display:flex; justify-content:space-between; font-size:11.5px; margin-bottom:4px;"><span>${label}</span><span class="mono">${display}</span></div>
+        <div class="rank-track" style="height:6px;"><div class="rank-fill" style="width:${value}%; background:#2a78d6;"></div></div>
+      </div>`;
+  }
+
+  function chev(open) {
+    return icon(ICONS.chevronDown, { size: 14, stroke: '#898781', sw: 2.5, class: `chev${open ? ' open' : ''}` });
+  }
+
+  // ---------- Inspections tab (expandable rows) ----------
+  function inspectionsPanel() {
+    if (!inspections.length) return `<div class="empty-state">No inspection records in this demo dataset.</div>`;
+    return `
+      <table>
+        <thead><tr><th></th><th>Date</th><th>Level</th><th>State</th><th>Violations</th><th>Tampering</th><th>OOS</th></tr></thead>
+        <tbody>
+          ${inspections.map(i => `
+          <tr class="exp-row" data-toggle="insp-${i.id}">
+            <td style="width:24px;">${chev(false)}</td>
+            <td class="mono" style="color:#52514e;">${fmtDate(i.date)}</td>
+            <td>${i.level}</td>
+            <td>${i.state}</td>
+            <td class="mono">${i.violations.length}</td>
+            <td>${tamperingPill(i)}</td>
+            <td><span class="pill ${i.oos ? 'pill-critical' : 'pill-minimal'}">${i.oos ? 'Yes' : 'No'}</span></td>
+          </tr>
+          <tr class="exp-panel-row" id="panel-insp-${i.id}" hidden>
+            <td colspan="7">
+              <div class="exp-panel-inner">
+                <div style="display:flex; gap:24px; flex-wrap:wrap; font-size:12px; color:#52514e;">
+                  <span>Location: <b style="color:#0b0b0b;">${i.location}</b></span>
+                  <span>Vehicle: <b class="mono" style="color:#0b0b0b;">${i.vehicle}</b></span>
+                  <span>Provider: <b style="color:#0b0b0b;">${provider ? provider.name : '—'}</b></span>
+                </div>
+                ${i.violations.length ? `
+                <table style="font-size:12px; background:#fcfcfb; border-radius:8px; overflow:hidden;">
+                  <thead><tr><th>Code</th><th>Description</th><th>BASIC</th><th>Severity</th><th>OOS</th></tr></thead>
+                  <tbody>
+                    ${i.violations.map(v => `
+                    <tr>
+                      <td class="mono" style="color:#52514e;">${v.code}</td>
+                      <td>${v.desc}</td>
+                      <td>${v.basic}</td>
+                      <td class="mono">${v.severity} / 10</td>
+                      <td><span class="pill ${v.oos ? 'pill-critical' : 'pill-minimal'}" style="font-size:10.5px; padding:2px 8px;">${v.oos ? 'Yes' : 'No'}</span></td>
+                    </tr>`).join('')}
+                  </tbody>
+                </table>` : `<div style="font-size:12px; color:#898781;">No violations found during this inspection.</div>`}
+              </div>
+            </td>
+          </tr>`).join('')}
+        </tbody>
+      </table>`;
+  }
+
+  // ---------- Violations tab (expandable lifecycle) ----------
+  function violationsPanel() {
+    if (!violations.length) return `<div class="empty-state">No inspection or violation records in this demo dataset.</div>`;
+    return `
+      <table>
+        <thead><tr><th></th><th>Date</th><th>Type</th><th>Code</th><th>Severity</th><th>Source</th></tr></thead>
+        <tbody>
+          ${violations.map(v => {
+            const isOfficial = v.source === 'official';
+            return `
+          <tr class="exp-row" data-toggle="viol-${v.id}">
+            <td style="width:24px;">${chev(false)}</td>
+            <td class="mono" style="color:#52514e;">${fmtDate(v.date)}</td>
+            <td>${v.type}</td>
+            <td class="mono">${v.code}</td>
+            <td class="mono">${v.severity} / 10</td>
+            <td><span class="pill ${isOfficial ? 'pill-minimal' : 'pill-info'}">${isOfficial ? 'Official (SMS)' : 'Preliminary'}</span></td>
+          </tr>
+          <tr class="exp-panel-row" id="panel-viol-${v.id}" hidden>
+            <td colspan="6">
+              <div class="exp-panel-inner">
+                <div style="font-size:12px; color:#52514e;">${v.desc}</div>
+                <div style="display:flex; gap:20px; flex-wrap:wrap; font-size:12px; color:#52514e;">
+                  <span>BASIC: <b style="color:#0b0b0b;">${v.basic}</b></span>
+                  <span>OOS: <b style="color:${v.oos ? '#a12e2e' : '#0a6b0a'};">${v.oos ? 'Yes' : 'No'}</b></span>
+                  <span>Inspection: <b class="mono" style="color:#0b0b0b;">#${v.inspectionId}</b></span>
+                </div>
+                <div style="display:flex; flex-direction:column; gap:2px; font-size:12px; margin-top:4px;">
+                  <div style="display:flex; align-items:center; gap:8px;"><span style="width:8px; height:8px; border-radius:999px; background:#0ca30c; flex-shrink:0;"></span> Appeared in Vehicle Inspection File (preliminary) — ${fmtDate(v.date)}</div>
+                  <div style="display:flex; align-items:center; gap:8px;"><span style="width:8px; height:8px; border-radius:999px; background:${isOfficial ? '#0ca30c' : '#c3c2b7'}; flex-shrink:0;"></span> Dispute window (DataQs) — up to ~17 days + ~14-day analyst SLA</div>
+                  <div style="display:flex; align-items:center; gap:8px;"><span style="width:8px; height:8px; border-radius:999px; background:${isOfficial ? '#0ca30c' : '#e1e0d9'}; flex-shrink:0;"></span> ${isOfficial ? 'Included in official SMS Input — Violation Data' : 'Expected in official SMS Input — Violation Data'}</div>
+                </div>
+              </div>
+            </td>
+          </tr>`;
+          }).join('')}
+        </tbody>
+      </table>`;
+  }
+
+  // ---------- Tickets tab ----------
+  function ticketsPanel() {
+    if (!c.hasDetail) return `<div class="empty-state">No detailed ticket history in this demo dataset for a non-flagship company.</div>`;
+    if (!tickets.length) return `<div class="empty-state">No support tickets on file for ${c.name}.</div>`;
+    return `
+      ${c.tickets !== null && c.tickets > tickets.length ? `<div class="notice">${icon(ICONS.warn, { size: 16, stroke: '#9c3d1c' })}<div class="text">This demo dataset shows ${tickets.length} sample ticket${tickets.length === 1 ? '' : 's'} out of ${c.tickets} on file.</div></div>` : ''}
+      <table>
+        <thead><tr><th>Subject</th><th>Status</th><th>Date opened</th></tr></thead>
         <tbody>
           ${tickets.map(t => `
           <tr>
-            <td>${t.subject}</td>
+            <td style="font-weight:600;">${t.subject}</td>
             <td><span class="pill ${t.status === 'Open' ? 'pill-elevated' : 'pill-minimal'}">${t.status}</span></td>
             <td class="mono" style="color:#52514e;">${fmtDate(t.date)}</td>
           </tr>`).join('')}
         </tbody>
-      </table>
-      <div style="padding:12px 18px; border-top:1px solid #e1e0d9;"><a href="#">All tickets (${c.tickets}) →</a></div>`;
+      </table>`;
   }
 
-  function uploadsSection() {
+  // ---------- Uploads tab ----------
+  function uploadsPanel() {
     if (!c.hasDetail) return `<div class="empty-state">No detailed upload log in this demo dataset for a non-flagship company.</div>`;
+    if (!uploads.length) return `<div class="empty-state">No FMCSA upload events on file for ${c.name}.</div>`;
     return `
-      <table style="font-size:13px;">
+      <table>
         <thead><tr><th>Date &amp; time</th><th>Truck</th><th>Status</th></tr></thead>
         <tbody>
           ${uploads.map(u => `
@@ -54,63 +171,60 @@
             <td><span class="pill ${u.status === 'success' ? 'pill-minimal' : 'pill-critical'}">${u.status === 'success' ? 'Success' : 'Failed — ' + u.note}</span></td>
           </tr>`).join('')}
         </tbody>
-      </table>
-      <div style="padding:12px 18px; border-top:1px solid #e1e0d9;"><a href="#">Full history →</a></div>`;
+      </table>`;
   }
 
-  function violationsSection() {
-    if (!violations.length) return `<div class="empty-state">No inspection or violation records in this demo dataset.</div>`;
+  // ---------- Risk score tab ----------
+  function riskScorePanel() {
     return `
-      <table style="font-size:13px;">
-        <thead><tr><th>Date</th><th>Type</th><th>Source</th></tr></thead>
-        <tbody>
-          ${violations.map(v => `
-          <tr class="row-link" onclick="location.href='violation.html?id=${v.id}'">
-            <td class="mono" style="color:#52514e;">${fmtDate(v.date)}</td>
-            <td>${v.type}</td>
-            <td><span class="pill ${v.source === 'preliminary' ? 'pill-info' : 'pill-minimal'}">${v.source === 'preliminary' ? 'Preliminary' : 'Official (SMS)'}</span></td>
-          </tr>`).join('')}
-        </tbody>
-      </table>
-      <div style="padding:12px 18px; border-top:1px solid #e1e0d9; font-size:12px; color:#898781;">
-        "Preliminary" records can change for up to ~3 weeks while DataQs disputes are resolved. Click a row for case details.
+      <div style="display:flex; flex-direction:column; gap:14px; padding:16px;">
+        <div style="display:flex; justify-content:center;">
+          <svg width="180" height="110" viewBox="0 0 180 110">
+            <path d="M14 100 A76 76 0 0 1 166 100" fill="none" stroke="#e1e0d9" stroke-width="12" stroke-linecap="round"/>
+            <path d="M14 100 A76 76 0 0 1 ${end.x} ${end.y}" fill="none" stroke="${tierColor}" stroke-width="12" stroke-linecap="round"/>
+            <text x="90" y="82" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="30" font-weight="600" fill="#0b0b0b">${c.score}</text>
+            <text x="90" y="99" text-anchor="middle" font-family="IBM Plex Sans, sans-serif" font-size="10" fill="#898781">of 100</text>
+          </svg>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:10px; max-width:380px; margin:0 auto; width:100%;">
+          ${bar('OOS rate', Math.min(100, c.oosRate / 35 * 100), c.oosRate.toFixed(1) + '%')}
+          ${bar('Violations / inspection', Math.min(100, c.violPerInspection / 1.2 * 100), c.violPerInspection.toFixed(2))}
+          ${bar('Crash rate', Math.min(100, c.crashRate / 7 * 100), c.crashRate.toFixed(1) + '%')}
+          ${bar('Fatal crashes', Math.min(100, c.fatalCrashes / 1 * 90 + (c.fatalCrashes ? 10 : 0)), c.fatalCrashes + (c.fatalCrashes ? ' (12 mo)' : ''))}
+          ${bar('Data staleness', Math.min(100, c.dataStalenessDays / 20 * 100), c.dataStalenessDays + ' days')}
+        </div>
+        <div class="notice" style="max-width:460px; margin:0 auto;">
+          ${icon(ICONS.warn, { size: 16, stroke: '#9c3d1c' })}
+          <div class="text"><b style="color:#0b0b0b;">Internal score, not the official FMCSA SMS score.</b> Calculated from preliminary (daily) data; the official snapshot publishes monthly.</div>
+        </div>
       </div>`;
   }
 
-  function inspectionsSection() {
-    if (!inspections.length) return `<div class="empty-state">No inspection records in this demo dataset.</div>`;
-    return `
-      <table style="font-size:13px;">
-        <thead><tr><th>Date</th><th>Level</th><th>State</th><th>Violations</th><th>OOS</th><th></th></tr></thead>
-        <tbody>
-          ${inspections.map(i => `
-          <tr class="row-link" onclick="location.href='inspection.html?id=${i.id}'">
-            <td class="mono" style="color:#52514e;">${fmtDate(i.date)}</td>
-            <td>${i.level}</td>
-            <td>${i.state}</td>
-            <td class="mono">${i.violations.length}</td>
-            <td><span class="pill ${i.oos ? 'pill-critical' : 'pill-minimal'}">${i.oos ? 'Yes' : 'No'}</span></td>
-            <td><a href="inspection.html?id=${i.id}">Inspection →</a></td>
-          </tr>`).join('')}
-        </tbody>
-      </table>
-      <div style="padding:12px 18px; border-top:1px solid #e1e0d9;"><a href="#">All inspections →</a></div>`;
-  }
+  const TABS = [
+    { key: 'inspections', label: 'Inspections', count: inspections.length, render: inspectionsPanel },
+    { key: 'violations', label: 'Violations', count: violations.length, render: violationsPanel },
+    { key: 'tickets', label: 'Tickets', count: c.hasDetail ? tickets.length : null, render: ticketsPanel },
+    { key: 'uploads', label: 'Uploads', count: c.hasDetail ? uploads.length : null, render: uploadsPanel },
+    { key: 'risk', label: 'Risk Score', count: null, render: riskScorePanel },
+  ];
 
   document.getElementById('page').innerHTML = `
-    ${backLink('index.html', 'Back to dashboard')}
+    ${breadcrumb([
+      { label: 'Dashboard', href: 'index.html' },
+      { label: c.name },
+    ])}
 
-    <div class="card" style="padding:24px 28px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:16px;">
-      <div style="display:flex; align-items:center; gap:20px;">
-        <div style="width:52px; height:52px; border-radius:10px; background:#e6eefb; display:flex; align-items:center; justify-content:center;">
-          ${icon(ICONS.truck, { size: 26, stroke: '#2a78d6', sw: 2 })}
+    <div class="card" style="padding:18px 22px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:14px;">
+      <div style="display:flex; align-items:center; gap:16px;">
+        <div style="width:44px; height:44px; border-radius:9px; background:#e6eefb; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+          ${icon(ICONS.truck, { size: 22, stroke: '#2a78d6', sw: 2 })}
         </div>
         <div>
           <div style="display:flex; align-items:center; gap:10px;">
-            <div style="font-size:20px; font-weight:700;">${c.name}</div>
+            <div style="font-size:17px; font-weight:700;">${c.name}</div>
             ${clientBadge(c.client)}
           </div>
-          <div style="display:flex; gap:18px; margin-top:6px; font-size:13px; color:#52514e; flex-wrap:wrap;">
+          <div style="display:flex; gap:14px; margin-top:4px; font-size:12px; color:#52514e; flex-wrap:wrap;">
             <span>DOT <span class="mono" style="color:#0b0b0b;">${c.dot}</span></span>
             <span>MC <span class="mono" style="color:#0b0b0b;">${c.mc}</span></span>
             <span>Provider: ${provider ? `<a href="provider.html?id=${provider.id}" style="font-weight:700;">${provider.name}</a>` : '—'}</span>
@@ -118,50 +232,67 @@
           </div>
         </div>
       </div>
-      <div style="text-align:right;">
-        <div style="font-size:11px; color:#898781; text-transform:uppercase; letter-spacing:0.04em;">Internal Risk Score</div>
-        <div style="display:flex; align-items:baseline; gap:8px; justify-content:flex-end;">
-          <span class="mono" style="font-size:30px; font-weight:600;">${c.score}</span>
-          <span class="pill ${tier.cls}">${tier.label}</span>
+      <div style="display:flex; align-items:center; gap:22px;">
+        <div style="text-align:right;">
+          <div style="font-size:10px; color:#898781; text-transform:uppercase; letter-spacing:0.04em;">Tickets</div>
+          <div class="mono" style="font-size:15px; font-weight:600;">${c.tickets === null ? '—' : c.tickets}</div>
         </div>
-        <a href="risk-score.html?dot=${c.dot}">Score details →</a>
+        <div style="text-align:right;">
+          <div style="font-size:10px; color:#898781; text-transform:uppercase; letter-spacing:0.04em;">Tamperings</div>
+          <div class="mono" style="font-size:15px; font-weight:600;">${c.tamperings}</div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:10px; color:#898781; text-transform:uppercase; letter-spacing:0.04em;">Internal Risk Score</div>
+          <div style="display:flex; align-items:baseline; gap:6px; justify-content:flex-end;">
+            <span class="mono" style="font-size:20px; font-weight:600;">${c.score}</span>
+            <span class="pill ${tier.cls}">${icon(tierIcon, { size: 11, stroke: tierColor, sw: 2.5 })} ${tier.label}</span>
+          </div>
+        </div>
       </div>
     </div>
 
-    <div style="display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:16px; align-items:start;">
-      <div class="card">
-        <div class="section-head">
-          <div style="font-size:14px; font-weight:600;">Support tickets</div>
-          <span class="fresh">${icon(ICONS.clock, { size: 12, stroke: '#898781' })} data as of 9:14 AM today</span>
-        </div>
-        ${ticketsSection()}
-      </div>
-
-      <div class="card">
-        <div class="section-head">
-          <div style="font-size:14px; font-weight:600;">FMCSA data uploads</div>
-          <span class="fresh">${icon(ICONS.clock, { size: 12, stroke: '#898781' })} data as of 4:12 AM today</span>
-        </div>
-        ${uploadsSection()}
-      </div>
-
-      <div class="card">
-        <div class="section-head">
-          <div style="font-size:14px; font-weight:600;">Violations</div>
-          <span class="fresh">${icon(ICONS.clock, { size: 12, stroke: '#898781' })} merged from two sources</span>
-        </div>
-        ${violationsSection()}
-      </div>
-    </div>
-
-    <div class="card" style="overflow:hidden;">
-      <div class="section-head">
-        <div style="font-size:14px; font-weight:600;">Inspections</div>
-        <span class="fresh">${icon(ICONS.clock, { size: 12, stroke: '#898781' })} Vehicle Inspection File · updated 4:12 AM today</span>
-      </div>
-      ${inspectionsSection()}
+    <div class="card" id="tabs-card" style="overflow:hidden;">
+      <div class="tabs" id="tab-bar"></div>
+      <div class="tab-panel" id="tab-panel"></div>
     </div>
   `;
+
+  const tabBar = document.getElementById('tab-bar');
+  const tabPanel = document.getElementById('tab-panel');
+
+  function renderTabBar(activeKey) {
+    tabBar.innerHTML = TABS.map(t => `
+      <button class="tab-btn ${t.key === activeKey ? 'active' : ''}" data-tab="${t.key}">
+        ${t.label}${t.count !== null ? `<span class="tab-count">${t.count}</span>` : ''}
+      </button>`).join('');
+  }
+
+  function bindExpandableRows() {
+    tabPanel.querySelectorAll('.exp-row').forEach(row => {
+      row.addEventListener('click', () => {
+        const key = row.dataset.toggle;
+        const panel = document.getElementById(`panel-${key}`);
+        const c2 = row.querySelector('.chev');
+        if (!panel) return;
+        panel.hidden = !panel.hidden;
+        if (c2) c2.classList.toggle('open', !panel.hidden);
+      });
+    });
+  }
+
+  function selectTab(key) {
+    renderTabBar(key);
+    const tab = TABS.find(t => t.key === key) || TABS[0];
+    tabPanel.innerHTML = tab.render();
+    bindExpandableRows();
+  }
+
+  tabBar.addEventListener('click', (e) => {
+    const btn = e.target.closest('.tab-btn');
+    if (btn) selectTab(btn.dataset.tab);
+  });
+
+  selectTab('inspections');
 </script>
 </body>
 </html>
