@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FMCSA Data Analyzer — Dashboard</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div data-topbar></div>
+
+<div class="page">
+
+  <div style="display:flex; align-items:flex-end; justify-content:space-between;">
+    <div>
+      <h1 style="margin:0 0 4px 0; font-size:24px; font-weight:700;">Dashboard</h1>
+      <div style="font-size:14px; color:#52514e;">Summary compliance statistics across client companies and ELD providers</div>
+    </div>
+    <div style="display:flex; align-items:center; gap:10px;">
+      <select class="select" style="min-width:150px;">
+        <option>Last 30 days</option>
+        <option>This month</option>
+        <option>This year</option>
+      </select>
+      <div style="display:flex; align-items:center; gap:6px; font-size:12px; color:#898781;">Updated today, 9:14 AM</div>
+    </div>
+  </div>
+
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+    <div class="card" style="padding:22px 24px; display:flex; flex-direction:column; gap:14px;">
+      <div style="display:flex; align-items:baseline; justify-content:space-between;">
+        <div style="font-size:14px; font-weight:600;">Providers by worst company score</div>
+        <a href="providers.html">All providers →</a>
+      </div>
+      <div style="font-size:12px; color:#898781; margin-top:-8px;">average Risk Score of the provider's companies — lower is worse</div>
+      <div id="rank-score" style="display:flex; flex-direction:column; gap:11px;"></div>
+    </div>
+
+    <div class="card" style="padding:22px 24px; display:flex; flex-direction:column; gap:14px;">
+      <div style="display:flex; align-items:baseline; justify-content:space-between;">
+        <div style="font-size:14px; font-weight:600;">Providers by tampering count</div>
+        <a href="providers.html">All providers →</a>
+      </div>
+      <div style="font-size:12px; color:#898781; margin-top:-8px;">number of ELD tampering cases, last 30 days</div>
+      <div id="rank-tamper" style="display:flex; flex-direction:column; gap:11px;"></div>
+    </div>
+  </div>
+
+  <div class="card" style="padding:22px 24px; display:flex; flex-direction:column; gap:14px;">
+    <div style="display:flex; align-items:baseline; justify-content:space-between;">
+      <div style="font-size:14px; font-weight:600;">Tamperings by state</div>
+      <div style="display:flex; align-items:center; gap:14px;">
+        <div style="font-size:12px; color:#898781;">top 8 states by case count, last 30 days</div>
+        <a href="state.html?state=TX">Detailed breakdown →</a>
+      </div>
+    </div>
+    <div id="state-grid" style="display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:16px 28px;"></div>
+  </div>
+
+  <div class="card" style="overflow:hidden;">
+    <div style="padding:20px 24px; border-bottom:1px solid #e1e0d9; display:flex; align-items:center; justify-content:space-between;">
+      <div style="font-size:14px; font-weight:600;">Client companies</div>
+      <div style="display:flex; align-items:center; gap:10px;">
+        <select id="provider-filter" class="select" style="min-width:150px; padding:7px 10px; font-size:13px;">
+          <option value="">All providers</option>
+        </select>
+        <input id="search" class="select" style="min-width:220px; padding:7px 10px; font-size:13px;" placeholder="Search company or DOT">
+      </div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th><span class="th-sort" data-sort="name">Company</span></th>
+          <th>DOT</th>
+          <th>Provider</th>
+          <th><span class="th-sort" data-sort="score">Score</span></th>
+          <th><span class="th-sort" data-sort="tickets">Tickets</span></th>
+          <th><span class="th-sort" data-sort="tamperings">Tamperings</span></th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="company-rows"></tbody>
+    </table>
+    <div id="company-count" style="padding:14px 24px; font-size:12px; color:#898781; border-top:1px solid #e1e0d9;"></div>
+  </div>
+
+</div>
+
+<script src="js/data.js"></script>
+<script src="js/app.js"></script>
+<script>
+  const rankScoreEl = document.getElementById('rank-score');
+  const rankTamperEl = document.getElementById('rank-tamper');
+  const stateGridEl = document.getElementById('state-grid');
+  const providerFilterEl = document.getElementById('provider-filter');
+  const searchEl = document.getElementById('search');
+  const rowsEl = document.getElementById('company-rows');
+  const countEl = document.getElementById('company-count');
+
+  function barColorForScore(score) {
+    if (score >= 75) return '#0ca30c';
+    if (score >= 60) return '#fab219';
+    if (score >= 40) return '#ec835a';
+    return '#d03b3b';
+  }
+
+  function renderRankByScore() {
+    const rows = [...PROVIDERS].sort((a, b) => a.avgScore - b.avgScore);
+    const max = 100;
+    rankScoreEl.innerHTML = rows.map((p, i) => `
+      <a class="rank-row" href="provider.html?id=${p.id}">
+        <span class="rank-num">${i + 1}</span>
+        <span class="rank-name" style="${i === 0 ? 'font-weight:600;' : ''}">${p.name}</span>
+        <span class="rank-track"><span class="rank-fill" style="width:${Math.round((100 - p.avgScore) / (100 - Math.min(...rows.map(r=>r.avgScore))) * 82 + 12)}%; background:${barColorForScore(p.avgScore)};"></span></span>
+        <span class="rank-val mono">${p.avgScore}</span>
+      </a>`).join('');
+  }
+
+  function renderRankByTamper() {
+    const rows = [...PROVIDERS].sort((a, b) => b.tamperings - a.tamperings);
+    const max = rows[0].tamperings;
+    rankTamperEl.innerHTML = rows.map((p, i) => `
+      <a class="rank-row" href="provider.html?id=${p.id}">
+        <span class="rank-num">${i + 1}</span>
+        <span class="rank-name" style="${i === 0 ? 'font-weight:600;' : ''}">${p.name}</span>
+        <span class="rank-track"><span class="rank-fill" style="width:${Math.round(p.tamperings / max * 100)}%; background:#2a78d6;"></span></span>
+        <span class="rank-val mono">${p.tamperings}</span>
+      </a>`).join('');
+  }
+
+  function renderStates() {
+    const rows = [...STATES].sort((a, b) => b.count - a.count);
+    const max = rows[0].count;
+    stateGridEl.innerHTML = rows.map(s => `
+      <a class="rank-row" href="state.html?state=${s.code}">
+        <span class="rank-name" style="width:96px;">${s.code}</span>
+        <span class="rank-track"><span class="rank-fill" style="width:${Math.round(s.count / max * 100)}%; background:#4a3aa7;"></span></span>
+        <span class="rank-val mono">${s.count}</span>
+      </a>`).join('');
+  }
+
+  function populateProviderFilter() {
+    providerFilterEl.innerHTML = '<option value="">All providers</option>' +
+      PROVIDERS.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+  }
+
+  let sortField = 'tamperings';
+  let sortDir = -1;
+
+  function renderCompanies() {
+    const providerVal = providerFilterEl.value;
+    const q = searchEl.value.trim().toLowerCase();
+    let rows = COMPANIES.filter(c => {
+      if (providerVal && c.provider !== providerVal) return false;
+      if (q && !(c.name.toLowerCase().includes(q) || c.dot.includes(q))) return false;
+      return true;
+    });
+    rows.sort((a, b) => {
+      let av = a[sortField], bv = b[sortField];
+      if (av === null) av = -1;
+      if (bv === null) bv = -1;
+      if (typeof av === 'string') return av.localeCompare(bv) * sortDir;
+      return (av - bv) * sortDir;
+    });
+
+    rowsEl.innerHTML = rows.map(c => {
+      const provider = getProvider(c.provider);
+      return `
+      <tr class="row-link" onclick="location.href='company.html?dot=${c.dot}'">
+        <td>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span style="font-weight:600; ${c.client ? '' : 'color:#52514e;'}">${c.name}</span>
+            ${clientBadge(c.client)}
+          </div>
+        </td>
+        <td class="mono" style="color:#52514e;">${c.dot}</td>
+        <td>${provider ? provider.name : '—'}</td>
+        <td>${scorePill(c.score)}</td>
+        <td class="mono" style="font-variant-numeric:tabular-nums;">${c.tickets === null ? '<span style="color:#c3c2b7;">—</span>' : c.tickets}</td>
+        <td class="mono" style="font-variant-numeric:tabular-nums;">${c.tamperings}</td>
+        <td><a href="company.html?dot=${c.dot}">Company →</a></td>
+      </tr>`;
+    }).join('');
+
+    countEl.textContent = `Showing ${rows.length} of ${COMPANIES.length} companies · public FMCSA records for non-client carriers appear without ticket data`;
+  }
+
+  document.querySelectorAll('.th-sort').forEach(el => {
+    el.innerHTML += ' ' + icon(ICONS.sort, { size: 11, stroke: '#0b0b0b', sw: 2.5 });
+    el.addEventListener('click', () => {
+      const field = el.dataset.sort;
+      if (sortField === field) sortDir *= -1; else { sortField = field; sortDir = 1; }
+      document.querySelectorAll('.th-sort').forEach(e => e.classList.remove('active'));
+      el.classList.add('active');
+      renderCompanies();
+    });
+  });
+
+  providerFilterEl.addEventListener('change', renderCompanies);
+  searchEl.addEventListener('input', renderCompanies);
+
+  renderRankByScore();
+  renderRankByTamper();
+  renderStates();
+  populateProviderFilter();
+  renderCompanies();
+</script>
+</body>
+</html>

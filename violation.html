@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FMCSA Data Analyzer — Violation</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div data-topbar></div>
+
+<div class="page narrower" id="page"></div>
+
+<script src="js/data.js"></script>
+<script src="js/app.js"></script>
+<script>
+  const id = qs('id') || 'v1';
+  const found = getViolation(id) || getViolation('v1');
+  const { violation: v, inspection: insp } = found;
+  const c = getCompany(insp.dot);
+  const provider = c ? getProvider(c.provider) : null;
+  const isOfficial = v.source === 'official';
+
+  document.getElementById('page').innerHTML = `
+    ${backLink(`inspection.html?id=${insp.id}`, `Back to inspection #${insp.id}`)}
+
+    <div class="card" style="padding:24px 28px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
+      <div>
+        <div style="font-size:20px; font-weight:700;">${v.type} — code ${v.code}</div>
+        <div style="font-size:13px; color:#52514e; margin-top:6px;">${v.desc}</div>
+      </div>
+      <span class="pill pill-info" style="font-size:13px; padding:6px 14px;">${isOfficial ? 'Official (in SMS)' : 'Preliminary (not yet in official SMS)'}</span>
+    </div>
+
+    <div class="card" style="padding:24px 28px; display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:22px;">
+      <div class="kv"><span class="k">Company</span><span class="v">${c ? `<a href="company.html?dot=${c.dot}">${c.name}</a>` : '—'}</span></div>
+      <div class="kv"><span class="k">Provider</span><span class="v">${provider ? `<a href="provider.html?id=${provider.id}">${provider.name}</a>` : '—'}</span></div>
+      <div class="kv"><span class="k">Inspection</span><span class="v"><a href="inspection.html?id=${insp.id}" class="mono">#${insp.id}</a></span></div>
+      <div class="kv"><span class="k">Date detected</span><span class="v mono">${fmtDate(insp.date)}</span></div>
+      <div class="kv"><span class="k">BASIC category</span><span class="v">${v.basic}</span></div>
+      <div class="kv"><span class="k">Severity weight</span><span class="v mono">${v.severity} / 10</span></div>
+      <div class="kv"><span class="k">Out-of-service</span><span class="v" style="color:${v.oos ? '#a12e2e' : '#0a6b0a'};">${v.oos ? 'Yes' : 'No'}</span></div>
+      <div class="kv"><span class="k">Time weight (SMS)</span><span class="v mono">×3 (≤ 6 mo)</span></div>
+      <div class="kv"><span class="k">State</span><span class="v">${insp.state}</span></div>
+    </div>
+
+    <div class="card" style="padding:20px 24px;">
+      <div style="font-size:14px; font-weight:600; margin-bottom:6px;">Record lifecycle</div>
+      <div>
+        <div class="step">
+          <div class="dot" style="background:#0ca30c;"></div>
+          <div>
+            <div style="font-size:13px; font-weight:600;">Appeared in Vehicle Inspection File (preliminary)</div>
+            <div style="font-size:12px; color:#898781;" class="mono">${fmtDate(insp.date)} — ~1 day lag from the inspection date</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="dot" style="background:${isOfficial ? '#0ca30c' : '#c3c2b7'};"></div>
+          <div>
+            <div style="font-size:13px; font-weight:600; color:${isOfficial ? '#0b0b0b' : '#898781'};">Dispute window (DataQs)</div>
+            <div style="font-size:12px; color:#898781;">up to ~17 days for the carrier to file + ~14-day FMCSA analyst SLA</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="dot" style="background:${isOfficial ? '#0ca30c' : '#e1e0d9'};"></div>
+          <div>
+            <div style="font-size:13px; font-weight:600; color:${isOfficial ? '#0b0b0b' : '#898781'};">${isOfficial ? 'Included in official SMS Input — Violation Data' : 'Expected in official SMS Input — Violation Data'}</div>
+            <div style="font-size:12px; color:#898781;" class="mono">${isOfficial ? 'confirmed in the 09/01/2026 snapshot' : '10/01/2026 snapshot'}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="notice">
+      ${icon(ICONS.warn, { size: 18, stroke: '#9c3d1c' })}
+      <div class="text">
+        ${isOfficial
+          ? `This case has cleared the DataQs dispute window and is now part of the official FMCSA SMS calculation.`
+          : `This is a preliminary (raw daily) record and is not yet part of the official SMS calculation. It may be removed or changed if the carrier successfully disputes it through DataQs.`}
+      </div>
+    </div>
+  `;
+</script>
+</body>
+</html>

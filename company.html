@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FMCSA Data Analyzer — Company</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div data-topbar></div>
+
+<div class="page" id="page"></div>
+
+<script src="js/data.js"></script>
+<script src="js/app.js"></script>
+<script>
+  const dot = qs('dot') || COMPANIES[0].dot;
+  const c = getCompany(dot) || COMPANIES[0];
+  const provider = getProvider(c.provider);
+  const tier = scoreTier(c.score);
+
+  const tickets = TICKETS[c.dot] || [];
+  const uploads = UPLOADS[c.dot] || [];
+  const inspections = getInspectionsForCompany(c.dot);
+  const violations = getViolationsForCompany(c.dot);
+
+  function ticketsSection() {
+    if (!c.hasDetail) return `<div class="empty-state">No detailed ticket history in this demo dataset for a non-flagship company.</div>`;
+    return `
+      <table style="font-size:13px;">
+        <thead><tr><th>Subject</th><th>Status</th><th>Date</th></tr></thead>
+        <tbody>
+          ${tickets.map(t => `
+          <tr>
+            <td>${t.subject}</td>
+            <td><span class="pill ${t.status === 'Open' ? 'pill-elevated' : 'pill-minimal'}">${t.status}</span></td>
+            <td class="mono" style="color:#52514e;">${fmtDate(t.date)}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+      <div style="padding:12px 18px; border-top:1px solid #e1e0d9;"><a href="#">All tickets (${c.tickets}) →</a></div>`;
+  }
+
+  function uploadsSection() {
+    if (!c.hasDetail) return `<div class="empty-state">No detailed upload log in this demo dataset for a non-flagship company.</div>`;
+    return `
+      <table style="font-size:13px;">
+        <thead><tr><th>Date &amp; time</th><th>Truck</th><th>Status</th></tr></thead>
+        <tbody>
+          ${uploads.map(u => `
+          <tr>
+            <td class="mono" style="color:#52514e;">${u.datetime.replace(' ', ', ')}</td>
+            <td class="mono">${u.truck}</td>
+            <td><span class="pill ${u.status === 'success' ? 'pill-minimal' : 'pill-critical'}">${u.status === 'success' ? 'Success' : 'Failed — ' + u.note}</span></td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+      <div style="padding:12px 18px; border-top:1px solid #e1e0d9;"><a href="#">Full history →</a></div>`;
+  }
+
+  function violationsSection() {
+    if (!violations.length) return `<div class="empty-state">No inspection or violation records in this demo dataset.</div>`;
+    return `
+      <table style="font-size:13px;">
+        <thead><tr><th>Date</th><th>Type</th><th>Source</th></tr></thead>
+        <tbody>
+          ${violations.map(v => `
+          <tr class="row-link" onclick="location.href='violation.html?id=${v.id}'">
+            <td class="mono" style="color:#52514e;">${fmtDate(v.date)}</td>
+            <td>${v.type}</td>
+            <td><span class="pill ${v.source === 'preliminary' ? 'pill-info' : 'pill-minimal'}">${v.source === 'preliminary' ? 'Preliminary' : 'Official (SMS)'}</span></td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+      <div style="padding:12px 18px; border-top:1px solid #e1e0d9; font-size:12px; color:#898781;">
+        "Preliminary" records can change for up to ~3 weeks while DataQs disputes are resolved. Click a row for case details.
+      </div>`;
+  }
+
+  function inspectionsSection() {
+    if (!inspections.length) return `<div class="empty-state">No inspection records in this demo dataset.</div>`;
+    return `
+      <table style="font-size:13px;">
+        <thead><tr><th>Date</th><th>Level</th><th>State</th><th>Violations</th><th>OOS</th><th></th></tr></thead>
+        <tbody>
+          ${inspections.map(i => `
+          <tr class="row-link" onclick="location.href='inspection.html?id=${i.id}'">
+            <td class="mono" style="color:#52514e;">${fmtDate(i.date)}</td>
+            <td>${i.level}</td>
+            <td>${i.state}</td>
+            <td class="mono">${i.violations.length}</td>
+            <td><span class="pill ${i.oos ? 'pill-critical' : 'pill-minimal'}">${i.oos ? 'Yes' : 'No'}</span></td>
+            <td><a href="inspection.html?id=${i.id}">Inspection →</a></td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+      <div style="padding:12px 18px; border-top:1px solid #e1e0d9;"><a href="#">All inspections →</a></div>`;
+  }
+
+  document.getElementById('page').innerHTML = `
+    ${backLink('index.html', 'Back to dashboard')}
+
+    <div class="card" style="padding:24px 28px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:16px;">
+      <div style="display:flex; align-items:center; gap:20px;">
+        <div style="width:52px; height:52px; border-radius:10px; background:#e6eefb; display:flex; align-items:center; justify-content:center;">
+          ${icon(ICONS.truck, { size: 26, stroke: '#2a78d6', sw: 2 })}
+        </div>
+        <div>
+          <div style="display:flex; align-items:center; gap:10px;">
+            <div style="font-size:20px; font-weight:700;">${c.name}</div>
+            ${clientBadge(c.client)}
+          </div>
+          <div style="display:flex; gap:18px; margin-top:6px; font-size:13px; color:#52514e; flex-wrap:wrap;">
+            <span>DOT <span class="mono" style="color:#0b0b0b;">${c.dot}</span></span>
+            <span>MC <span class="mono" style="color:#0b0b0b;">${c.mc}</span></span>
+            <span>Provider: ${provider ? `<a href="provider.html?id=${provider.id}" style="font-weight:700;">${provider.name}</a>` : '—'}</span>
+            <span>Status: <b style="color:#0a6b0a;">${c.status}</b></span>
+          </div>
+        </div>
+      </div>
+      <div style="text-align:right;">
+        <div style="font-size:11px; color:#898781; text-transform:uppercase; letter-spacing:0.04em;">Internal Risk Score</div>
+        <div style="display:flex; align-items:baseline; gap:8px; justify-content:flex-end;">
+          <span class="mono" style="font-size:30px; font-weight:600;">${c.score}</span>
+          <span class="pill ${tier.cls}">${tier.label}</span>
+        </div>
+        <a href="risk-score.html?dot=${c.dot}">Score details →</a>
+      </div>
+    </div>
+
+    <div style="display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:16px; align-items:start;">
+      <div class="card">
+        <div class="section-head">
+          <div style="font-size:14px; font-weight:600;">Support tickets</div>
+          <span class="fresh">${icon(ICONS.clock, { size: 12, stroke: '#898781' })} data as of 9:14 AM today</span>
+        </div>
+        ${ticketsSection()}
+      </div>
+
+      <div class="card">
+        <div class="section-head">
+          <div style="font-size:14px; font-weight:600;">FMCSA data uploads</div>
+          <span class="fresh">${icon(ICONS.clock, { size: 12, stroke: '#898781' })} data as of 4:12 AM today</span>
+        </div>
+        ${uploadsSection()}
+      </div>
+
+      <div class="card">
+        <div class="section-head">
+          <div style="font-size:14px; font-weight:600;">Violations</div>
+          <span class="fresh">${icon(ICONS.clock, { size: 12, stroke: '#898781' })} merged from two sources</span>
+        </div>
+        ${violationsSection()}
+      </div>
+    </div>
+
+    <div class="card" style="overflow:hidden;">
+      <div class="section-head">
+        <div style="font-size:14px; font-weight:600;">Inspections</div>
+        <span class="fresh">${icon(ICONS.clock, { size: 12, stroke: '#898781' })} Vehicle Inspection File · updated 4:12 AM today</span>
+      </div>
+      ${inspectionsSection()}
+    </div>
+  `;
+</script>
+</body>
+</html>

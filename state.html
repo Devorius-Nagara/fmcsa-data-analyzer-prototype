@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FMCSA Data Analyzer — State breakdown</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div data-topbar></div>
+
+<div class="page">
+  <div id="back"></div>
+
+  <div style="display:flex; align-items:flex-end; justify-content:space-between;">
+    <div>
+      <h1 style="margin:0 0 4px 0; font-size:24px; font-weight:700;">Tamperings by state</h1>
+      <div style="font-size:14px; color:#52514e;">Detailed breakdown of ELD tampering cases across all states</div>
+    </div>
+    <div class="segmented" id="period-switch">
+      <button data-period="30d" class="active">Last 30 days</button>
+      <button data-period="month">Month</button>
+      <button data-period="year">Year</button>
+    </div>
+  </div>
+
+  <div id="tiles" style="display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:16px;"></div>
+
+  <div style="display:grid; grid-template-columns:1.3fr 1fr; gap:16px; align-items:start;">
+    <div class="card" style="padding:22px 24px; display:flex; flex-direction:column; gap:14px;">
+      <div style="font-size:14px; font-weight:600;">All states, ranked</div>
+      <div id="state-list" style="display:flex; flex-direction:column; gap:12px;"></div>
+    </div>
+
+    <div class="card" style="padding:22px 24px; display:flex; flex-direction:column; gap:14px;">
+      <div>
+        <div style="font-size:14px; font-weight:600;" id="trend-title">Trend — Texas (top state)</div>
+        <div style="font-size:12px; color:#898781;" id="trend-sub">tamperings per period</div>
+      </div>
+      <svg viewBox="0 0 420 160" width="100%" height="160">
+        <line x1="0" y1="10" x2="420" y2="10" stroke="#e1e0d9" stroke-width="1"/>
+        <line x1="0" y1="60" x2="420" y2="60" stroke="#e1e0d9" stroke-width="1"/>
+        <line x1="0" y1="110" x2="420" y2="110" stroke="#e1e0d9" stroke-width="1"/>
+        <line x1="0" y1="150" x2="420" y2="150" stroke="#c3c2b7" stroke-width="1"/>
+        <polyline points="0,130 60,120 120,100 180,105 240,80 300,70 360,45 420,20"
+          fill="none" stroke="#4a3aa7" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="420" cy="20" r="4" fill="#4a3aa7"/>
+      </svg>
+      <div style="font-size:12px; color:#898781;">Switching the period above rescales the totals and ranking on this page (trend shape stays illustrative).</div>
+    </div>
+  </div>
+
+  <div class="card" style="overflow:hidden;">
+    <div style="padding:20px 24px; border-bottom:1px solid #e1e0d9; display:flex; align-items:center; justify-content:space-between;">
+      <div style="font-size:14px; font-weight:600;" id="companies-title">Companies with tamperings in Texas (TX)</div>
+      <span class="pill pill-info" id="companies-count-pill"></span>
+    </div>
+    <div id="companies-table"></div>
+  </div>
+</div>
+
+<script src="js/data.js"></script>
+<script src="js/app.js"></script>
+<script>
+  document.getElementById('back').innerHTML = backLink('index.html', 'Back to dashboard');
+
+  let currentPeriod = '30d';
+  let currentState = qs('state') || 'TX';
+
+  function scaledStates() {
+    const scale = STATE_PERIOD_SCALE[currentPeriod];
+    return STATES.map(s => ({ ...s, count: Math.round(s.count * scale) })).sort((a, b) => b.count - a.count);
+  }
+
+  function render() {
+    const list = scaledStates();
+    const total = list.reduce((s, x) => s + x.count, 0);
+    const top = list[0];
+    const stateObj = list.find(s => s.code === currentState) || top;
+
+    document.getElementById('tiles').innerHTML = `
+      <div class="card" style="padding:20px;">
+        <div style="font-size:13px; color:#52514e; margin-bottom:10px;">Total tamperings</div>
+        <div class="mono" style="font-size:28px; font-weight:600;">${total}</div>
+        <div style="font-size:12px; color:#898781; margin-top:6px;">across ${list.length} states</div>
+      </div>
+      <div class="card" style="padding:20px;">
+        <div style="font-size:13px; color:#52514e; margin-bottom:10px;">Top state</div>
+        <div class="mono" style="font-size:28px; font-weight:600;">${top.code}</div>
+        <div style="font-size:12px; color:#898781; margin-top:6px;">${top.count} cases · ${(top.count / total * 100).toFixed(1)}% of total</div>
+      </div>
+      <div class="card" style="padding:20px;">
+        <div style="font-size:13px; color:#52514e; margin-bottom:10px;">States with 1+ client company</div>
+        <div class="mono" style="font-size:28px; font-weight:600;">${Math.min(31 + (currentPeriod === 'year' ? 6 : currentPeriod === 'month' ? 2 : 0), 51)}</div>
+        <div style="font-size:12px; color:#898781; margin-top:6px;">of 50 states + DC</div>
+      </div>
+      <div class="card" style="padding:20px;">
+        <div style="font-size:13px; color:#52514e; margin-bottom:10px;">vs. previous period</div>
+        <div class="mono" style="font-size:28px; font-weight:600;">${STATE_PERIOD_DELTA[currentPeriod]}</div>
+        <div style="font-size:12px; color:#898781; margin-top:6px;">${STATE_PERIOD_LABEL[currentPeriod].toLowerCase()} vs. prior period</div>
+      </div>`;
+
+    const max = list[0].count;
+    document.getElementById('state-list').innerHTML = list.map((s, i) => `
+      <a class="rank-row" href="state.html?state=${s.code}" style="${s.code === currentState ? 'font-weight:600;' : ''}" onclick="event.preventDefault(); selectState('${s.code}');">
+        <span class="rank-num">${i + 1}</span>
+        <span class="rank-name">${s.name} (${s.code})</span>
+        <span class="rank-track"><span class="rank-fill" style="width:${Math.round(s.count / max * 100)}%; background:#4a3aa7;"></span></span>
+        <span class="rank-val mono">${s.count}</span>
+      </a>`).join('');
+
+    document.getElementById('trend-title').textContent = `Trend — ${stateObj.name} (top state)`;
+    document.getElementById('trend-sub').textContent = `tamperings per period, current selection: ${STATE_PERIOD_LABEL[currentPeriod]}`;
+
+    document.getElementById('companies-title').textContent = `Companies with tamperings in ${stateObj.name} (${stateObj.code})`;
+    document.getElementById('companies-count-pill').textContent = `${stateObj.count} cases`;
+
+    const inState = COMPANIES.filter(c => INSPECTIONS.some(i => i.dot === c.dot && i.state === stateObj.code));
+    const tableEl = document.getElementById('companies-table');
+    if (inState.length) {
+      tableEl.innerHTML = `
+        <table>
+          <thead><tr><th>Company</th><th>DOT</th><th>Provider</th><th>Tamperings</th><th>Score</th><th></th></tr></thead>
+          <tbody>
+            ${inState.map(c => {
+              const provider = getProvider(c.provider);
+              return `
+              <tr class="row-link" onclick="location.href='company.html?dot=${c.dot}'">
+                <td style="font-weight:600;">${c.name}</td>
+                <td class="mono" style="color:#52514e;">${c.dot}</td>
+                <td>${provider ? provider.name : '—'}</td>
+                <td class="mono">${c.tamperings}</td>
+                <td>${scorePill(c.score)}</td>
+                <td><a href="company.html?dot=${c.dot}">Company →</a></td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>`;
+    } else {
+      tableEl.innerHTML = `<div class="empty-state">No detailed company records for ${stateObj.name} in this demo dataset.</div>`;
+    }
+  }
+
+  window.selectState = (code) => { currentState = code; render(); };
+
+  document.querySelectorAll('#period-switch button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      currentPeriod = btn.dataset.period;
+      document.querySelectorAll('#period-switch button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      render();
+    });
+  });
+
+  render();
+</script>
+</body>
+</html>
