@@ -16,7 +16,7 @@
 
   <div>
     <h1 style="margin:0 0 4px 0; font-size:24px; font-weight:700;">Companies</h1>
-    <div style="font-size:14px; color:#52514e;">All client and non-client companies on file</div>
+    <div style="font-size:14px; color:#52514e;">Carriers on file — active only by default</div>
   </div>
 
   <div class="card" style="padding:14px 18px; display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
@@ -24,6 +24,11 @@
     <select id="provider-filter" class="select" style="min-width:150px; padding:7px 10px; font-size:13px;">
       <option value="">All providers</option>
     </select>
+    <div class="segmented" id="status-filter">
+      <button data-val="active" class="active">Active</button>
+      <button data-val="inactive">Inactive</button>
+      <button data-val="all">All</button>
+    </div>
     <div class="segmented" id="client-filter">
       <button data-val="" class="active">All</button>
       <button data-val="1">Client</button>
@@ -42,9 +47,8 @@
           <th><span class="th-sort" data-sort="name">Company</span></th>
           <th>DOT</th>
           <th>Provider</th>
-          <th><span class="th-sort" data-sort="score">Score</span></th>
+          <th><span class="th-sort active" data-sort="score">Score</span></th>
           <th><span class="th-sort" data-sort="inspections">Inspections</span></th>
-          <th><span class="th-sort" data-sort="tickets">Tickets</span></th>
           <th><span class="th-sort" data-sort="tamperings">Tamperings</span></th>
           <th></th>
         </tr>
@@ -69,6 +73,7 @@
   const providerFilterEl = document.getElementById('provider-filter');
   const searchEl = document.getElementById('search');
   const clientFilterEl = document.getElementById('client-filter');
+  const statusFilterEl = document.getElementById('status-filter');
   const minScoreEl = document.getElementById('min-score');
   const rowsEl = document.getElementById('company-rows');
   const countEl = document.getElementById('company-count');
@@ -81,13 +86,17 @@
   let sortField = 'score';
   let sortDir = 1;
   let clientVal = '';
+  let statusVal = 'active';
 
   function renderCompanies() {
     const providerVal = providerFilterEl.value;
     const q = searchEl.value.trim().toLowerCase();
     const minScore = Number(minScoreEl.value) || 0;
 
-    let rows = withInspections.filter(c => {
+    const inScope = withInspections.filter(c =>
+      statusVal === 'active' ? c.active : statusVal === 'inactive' ? !c.active : true);
+
+    let rows = inScope.filter(c => {
       if (providerVal && c.provider !== providerVal) return false;
       if (clientVal !== '' && String(c.client ? 1 : 0) !== clientVal) return false;
       if (c.score < minScore) return false;
@@ -97,8 +106,6 @@
 
     rows.sort((a, b) => {
       let av = a[sortField], bv = b[sortField];
-      if (av === null) av = -1;
-      if (bv === null) bv = -1;
       if (typeof av === 'string') return av.localeCompare(bv) * sortDir;
       return (av - bv) * sortDir;
     });
@@ -115,25 +122,23 @@
         </td>
         <td class="mono" style="color:#52514e;">${c.dot}</td>
         <td>${provider ? provider.name : '—'}</td>
-        <td>${scorePill(c.score)}</td>
+        <td>${scorePill(c.score, c.hasDetail)}</td>
         <td class="mono">${c.inspections}</td>
-        <td class="mono">${c.tickets === null ? '<span style="color:#c3c2b7;">—</span>' : c.tickets}</td>
         <td class="mono">${c.tamperings}</td>
         <td><a href="company.html?dot=${c.dot}">Company →</a></td>
       </tr>`;
     }).join('') : '';
 
     countEl.textContent = rows.length
-      ? `Showing ${rows.length} of ${COMPANIES.length} companies`
+      ? `Showing ${rows.length} of ${inScope.length} companies`
       : '';
     if (!rows.length) {
-      rowsEl.innerHTML = `<tr><td colspan="8"><div class="empty-state">No companies match these filters.</div></td></tr>`;
+      rowsEl.innerHTML = `<tr><td colspan="7"><div class="empty-state">No companies match these filters.</div></td></tr>`;
     }
   }
 
   document.querySelectorAll('.th-sort').forEach(el => {
     el.innerHTML += ' ' + icon(ICONS.sort, { size: 11, stroke: '#0b0b0b', sw: 2.5 });
-    if (el.dataset.sort === 'score') el.classList.add('active');
     el.addEventListener('click', () => {
       const field = el.dataset.sort;
       if (sortField === field) sortDir *= -1; else { sortField = field; sortDir = 1; }
@@ -147,6 +152,15 @@
     btn.addEventListener('click', () => {
       clientVal = btn.dataset.val;
       clientFilterEl.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      renderCompanies();
+    });
+  });
+
+  statusFilterEl.querySelectorAll('button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      statusVal = btn.dataset.val;
+      statusFilterEl.querySelectorAll('button').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       renderCompanies();
     });

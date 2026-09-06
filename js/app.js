@@ -83,9 +83,19 @@ function clientBadge(isClient) {
     : `<span class="client-badge client-no">Not a client</span>`;
 }
 
-function scorePill(score) {
+/* Renders the internal Safety Score as a pill. `hasDetail` MUST be passed
+   wherever a company/provider may lack FMCSA enrichment yet — an unenriched
+   record shows a neutral "No data" pill and NEVER a fabricated "0 · Critical".
+   This is our own heuristic risk score, not the official FMCSA SMS score. */
+function scorePill(score, hasDetail) {
+  if (hasDetail === false) return `<span class="pill pill-info">No data</span>`;
   const t = scoreTier(score);
   return `<span class="pill ${t.cls}">${score} · ${t.label}</span>`;
+}
+
+/* Small footnote to drop under/near any score display, clarifying provenance. */
+function scoreFootnote() {
+  return `<div style="font-size:11px; color:#898781;">Internal Safety Score — Trackensure's own risk heuristic, not the official FMCSA SMS score.</div>`;
 }
 
 function mountTopbar(el) { el.innerHTML = topbar(); }
@@ -103,6 +113,7 @@ function sidebarHTML() {
       <a class="sidebar-link ${active('index.html')}" href="index.html">${icon(ICONS.grid, { size: 16, stroke: activeStroke('index.html') })} Dashboard</a>
       <a class="sidebar-link ${active('providers.html')}" href="providers.html">${icon(ICONS.layers, { size: 16, stroke: activeStroke('providers.html') })} Providers</a>
       <a class="sidebar-link ${active('companies.html')}" href="companies.html">${icon(ICONS.list, { size: 16, stroke: activeStroke('companies.html') })} Company</a>
+      <a class="sidebar-link ${active('inspections.html')}" href="inspections.html">${icon(ICONS.clock, { size: 16, stroke: activeStroke('inspections.html') })} Inspections</a>
     </div>
 
     <div class="sidebar-section">

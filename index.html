@@ -16,16 +16,9 @@
   <div style="display:flex; align-items:flex-end; justify-content:space-between;">
     <div>
       <h1 style="margin:0 0 4px 0; font-size:24px; font-weight:700;">Dashboard</h1>
-      <div style="font-size:14px; color:#52514e;">Summary compliance statistics across client companies and ELD providers</div>
+      <div style="font-size:14px; color:#52514e;">Summary compliance statistics across tracked carriers and ELD providers</div>
     </div>
-    <div style="display:flex; align-items:center; gap:10px;">
-      <select class="select" style="min-width:150px;">
-        <option>Last 30 days</option>
-        <option>This month</option>
-        <option>This year</option>
-      </select>
-      <div style="display:flex; align-items:center; gap:6px; font-size:12px; color:#898781;">Updated today, 9:14 AM</div>
-    </div>
+    <div id="freshness" style="font-size:12px; color:#898781;"></div>
   </div>
 
   <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
@@ -34,7 +27,7 @@
         <div style="font-size:14px; font-weight:600;">Providers by worst company score</div>
         <a href="providers.html">All providers →</a>
       </div>
-      <div style="font-size:12px; color:#898781; margin-top:-8px;">average Risk Score of the provider's companies — lower is worse</div>
+      <div style="font-size:12px; color:#898781; margin-top:-8px;" title="Internal heuristic risk score, not the official FMCSA SMS score.">average Safety Score of the provider's companies — shorter bar = worse</div>
       <div id="rank-score" style="display:flex; flex-direction:column; gap:11px;"></div>
     </div>
 
@@ -43,25 +36,33 @@
         <div style="font-size:14px; font-weight:600;">Providers by tampering count</div>
         <a href="providers.html">All providers →</a>
       </div>
-      <div style="font-size:12px; color:#898781; margin-top:-8px;">number of ELD tampering cases, last 30 days</div>
+      <div style="font-size:12px; color:#898781; margin-top:-8px;">ELD-tampering cases — inspections with a tampering finding, all time</div>
       <div id="rank-tamper" style="display:flex; flex-direction:column; gap:11px;"></div>
     </div>
   </div>
 
   <div class="card" style="padding:22px 24px; display:flex; flex-direction:column; gap:14px;">
-    <div style="display:flex; align-items:baseline; justify-content:space-between;">
+    <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;">
       <div style="font-size:14px; font-weight:600;">Tamperings by state</div>
-      <div style="display:flex; align-items:center; gap:14px;">
-        <div style="font-size:12px; color:#898781;">top 8 states by case count, last 30 days</div>
+      <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
+        <div class="segmented" id="state-window">
+          <button data-window="day">Day</button>
+          <button data-window="week">Week</button>
+          <button data-window="30d" class="active">30 days</button>
+        </div>
+        <span style="display:flex; align-items:center; gap:12px; font-size:11px; color:#898781;">
+          <span style="display:flex; align-items:center; gap:5px;"><span style="width:9px; height:9px; border-radius:2px; background:#2a78d6; opacity:0.4; display:inline-block;"></span>inspections</span>
+          <span style="display:flex; align-items:center; gap:5px;"><span style="width:9px; height:9px; border-radius:2px; background:#d03b3b; display:inline-block;"></span>tampering cases</span>
+        </span>
         <a href="state.html?state=TX">Detailed breakdown →</a>
       </div>
     </div>
-    <div id="state-grid" style="display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:16px 28px;"></div>
+    <div id="state-grid" style="display:flex; flex-direction:column; gap:11px;"></div>
   </div>
 
   <div class="card" style="overflow:hidden;">
-    <div style="padding:20px 24px; border-bottom:1px solid #e1e0d9; display:flex; align-items:center; justify-content:space-between;">
-      <div style="font-size:14px; font-weight:600;">Client companies</div>
+    <div style="padding:20px 24px; border-bottom:1px solid #e1e0d9; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;">
+      <div style="font-size:14px; font-weight:600;">Carriers</div>
       <div style="display:flex; align-items:center; gap:10px;">
         <select id="provider-filter" class="select" style="min-width:150px; padding:7px 10px; font-size:13px;">
           <option value="">All providers</option>
@@ -76,7 +77,6 @@
           <th>DOT</th>
           <th>Provider</th>
           <th><span class="th-sort" data-sort="score">Score</span></th>
-          <th><span class="th-sort" data-sort="tickets">Tickets</span></th>
           <th><span class="th-sort" data-sort="tamperings">Tamperings</span></th>
           <th></th>
         </tr>
@@ -102,6 +102,9 @@
   const rowsEl = document.getElementById('company-rows');
   const countEl = document.getElementById('company-count');
 
+  const latestInspection = INSPECTIONS.reduce((max, i) => i.date > max ? i.date : max, INSPECTIONS[0].date);
+  document.getElementById('freshness').textContent = `Inspection data current to ${fmtDate(latestInspection)}`;
+
   function barColorForScore(score) {
     if (score >= 75) return '#0ca30c';
     if (score >= 60) return '#fab219';
@@ -110,20 +113,22 @@
   }
 
   function renderRankByScore() {
-    const rows = [...PROVIDERS].sort((a, b) => a.avgScore - b.avgScore);
-    const max = 100;
+    // Only providers with at least one enriched carrier have a meaningful
+    // average — unenriched ones sit at 0 and would otherwise falsely look "worst".
+    const scored = PROVIDERS.filter(p => p.avgScore > 0);
+    const rows = [...(scored.length ? scored : PROVIDERS)].sort((a, b) => a.avgScore - b.avgScore);
     rankScoreEl.innerHTML = rows.map((p, i) => `
       <a class="rank-row" href="provider.html?id=${p.id}">
         <span class="rank-num">${i + 1}</span>
         <span class="rank-name" style="${i === 0 ? 'font-weight:600;' : ''}">${p.name}</span>
-        <span class="rank-track"><span class="rank-fill" style="width:${Math.round((100 - p.avgScore) / (100 - Math.min(...rows.map(r=>r.avgScore))) * 82 + 12)}%; background:${barColorForScore(p.avgScore)};"></span></span>
+        <span class="rank-track"><span class="rank-fill" style="width:${p.avgScore}%; background:${barColorForScore(p.avgScore)};"></span></span>
         <span class="rank-val mono">${p.avgScore}</span>
       </a>`).join('');
   }
 
   function renderRankByTamper() {
     const rows = [...PROVIDERS].sort((a, b) => b.tamperings - a.tamperings);
-    const max = rows[0].tamperings;
+    const max = rows[0].tamperings || 1;
     rankTamperEl.innerHTML = rows.map((p, i) => `
       <a class="rank-row" href="provider.html?id=${p.id}">
         <span class="rank-num">${i + 1}</span>
@@ -133,16 +138,39 @@
       </a>`).join('');
   }
 
+  const STATE_WINDOW_SCALE = { day: 1 / 60, week: 1 / 8.6, '30d': 1 };
+  let stateWindow = '30d';
+
   function renderStates() {
-    const rows = [...STATES].sort((a, b) => b.count - a.count);
-    const max = rows[0].count;
-    stateGridEl.innerHTML = rows.map(s => `
+    const scale = STATE_WINDOW_SCALE[stateWindow];
+    const rows = STATES.map(s => ({ ...s, count: Math.max(0, Math.round(s.count * scale)), inspections: Math.max(0, Math.round(s.inspections * scale)) }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 12);
+    const maxInsp = Math.max(1, ...rows.map(s => s.inspections));
+    stateGridEl.innerHTML = rows.map(s => {
+      const rate = s.inspections > 0 ? (s.count / s.inspections * 100) : 0;
+      const inspPct = Math.round(s.inspections / maxInsp * 100);
+      const tamperPct = Math.round(s.count / maxInsp * 100);
+      return `
       <a class="rank-row" href="state.html?state=${s.code}">
-        <span class="rank-name" style="width:96px;">${s.code}</span>
-        <span class="rank-track"><span class="rank-fill" style="width:${Math.round(s.count / max * 100)}%; background:#4a3aa7;"></span></span>
-        <span class="rank-val mono">${s.count}</span>
-      </a>`).join('');
+        <span class="rank-name" style="width:34px; flex-shrink:0;">${s.code}</span>
+        <span class="rank-track" style="position:relative;">
+          <span class="rank-fill" style="width:${inspPct}%; background:#2a78d6; opacity:0.4;"></span>
+          <span class="rank-fill" style="position:absolute; top:0; left:0; width:${tamperPct}%; background:#d03b3b;"></span>
+        </span>
+        <span class="rank-val mono" style="width:96px;">${s.count} · ${rate.toFixed(1)}%</span>
+      </a>`;
+    }).join('');
   }
+
+  document.querySelectorAll('#state-window button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      stateWindow = btn.dataset.window;
+      document.querySelectorAll('#state-window button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      renderStates();
+    });
+  });
 
   function populateProviderFilter() {
     providerFilterEl.innerHTML = '<option value="">All providers</option>' +
@@ -162,8 +190,6 @@
     });
     rows.sort((a, b) => {
       let av = a[sortField], bv = b[sortField];
-      if (av === null) av = -1;
-      if (bv === null) bv = -1;
       if (typeof av === 'string') return av.localeCompare(bv) * sortDir;
       return (av - bv) * sortDir;
     });
@@ -180,14 +206,13 @@
         </td>
         <td class="mono" style="color:#52514e;">${c.dot}</td>
         <td>${provider ? provider.name : '—'}</td>
-        <td>${scorePill(c.score)}</td>
-        <td class="mono" style="font-variant-numeric:tabular-nums;">${c.tickets === null ? '<span style="color:#c3c2b7;">—</span>' : c.tickets}</td>
+        <td>${scorePill(c.score, c.hasDetail)}</td>
         <td class="mono" style="font-variant-numeric:tabular-nums;">${c.tamperings}</td>
         <td><a href="company.html?dot=${c.dot}">Company →</a></td>
       </tr>`;
     }).join('');
 
-    countEl.textContent = `Showing ${rows.length} of ${COMPANIES.length} companies · public FMCSA records for non-client carriers appear without ticket data`;
+    countEl.textContent = `Showing ${rows.length} of ${COMPANIES.length} companies · score shows "No data" until FMCSA enrichment has run for that carrier`;
   }
 
   document.querySelectorAll('.th-sort').forEach(el => {

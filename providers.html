@@ -19,9 +19,18 @@
     <div style="font-size:14px; color:#52514e;">All providers used by client companies</div>
   </div>
 
+  <div class="card" style="padding:14px 18px; display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+    <input id="search" class="select" style="min-width:220px; padding:7px 10px; font-size:13px;" placeholder="Search provider">
+    <div class="segmented" id="data-filter">
+      <button data-val="all" class="active">All</button>
+      <button data-val="with">With data</button>
+      <button data-val="without">No data</button>
+    </div>
+  </div>
+
   <div class="card" style="overflow:hidden;">
     <table>
-      <thead><tr><th>Provider</th><th>Companies</th><th>Average score</th><th>Tamperings (30d)</th><th></th></tr></thead>
+      <thead><tr><th>Provider</th><th>Companies</th><th>Average score</th><th>Tamperings (30D)</th><th></th></tr></thead>
       <tbody id="rows"></tbody>
     </table>
   </div>
@@ -39,18 +48,45 @@
   ]);
 
   const rowsEl = document.getElementById('rows');
-  const rows = [...PROVIDERS].sort((a, b) => a.avgScore - b.avgScore);
-  rowsEl.innerHTML = rows.map(p => {
-    const count = COMPANIES.filter(c => c.provider === p.id).length;
-    return `
+  const searchEl = document.getElementById('search');
+  const dataFilterEl = document.getElementById('data-filter');
+  let q = '';
+  let dataFilter = 'all';
+
+  function render() {
+    const withCount = PROVIDERS.map(p => ({ ...p, companies: COMPANIES.filter(c => c.provider === p.id).length, hasDetail: p.avgScore > 0 }));
+    let rows = withCount.filter(p => {
+      if (dataFilter === 'with' && !p.hasDetail) return false;
+      if (dataFilter === 'without' && p.hasDetail) return false;
+      if (q && !p.name.toLowerCase().includes(q)) return false;
+      return true;
+    });
+    // no-data providers always sink to the bottom, whatever the ranking
+    const withData = rows.filter(p => p.hasDetail).sort((a, b) => a.avgScore - b.avgScore);
+    const noData = rows.filter(p => !p.hasDetail);
+    rows = [...withData, ...noData];
+
+    rowsEl.innerHTML = rows.length ? rows.map(p => `
     <tr class="row-link" onclick="location.href='provider.html?id=${p.id}'">
       <td style="font-weight:600;">${p.name}</td>
-      <td class="mono">${count}</td>
-      <td>${scorePill(p.avgScore)}</td>
+      <td class="mono">${p.companies}</td>
+      <td>${scorePill(p.avgScore, p.hasDetail)}</td>
       <td class="mono">${p.tamperings}</td>
       <td><a href="provider.html?id=${p.id}">Provider →</a></td>
-    </tr>`;
-  }).join('');
+    </tr>`).join('') : `<tr><td colspan="5"><div class="empty-state">No providers match these filters.</div></td></tr>`;
+  }
+
+  searchEl.addEventListener('input', () => { q = searchEl.value.trim().toLowerCase(); render(); });
+  dataFilterEl.querySelectorAll('button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      dataFilter = btn.dataset.val;
+      dataFilterEl.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      render();
+    });
+  });
+
+  render();
 </script>
 </body>
 </html>

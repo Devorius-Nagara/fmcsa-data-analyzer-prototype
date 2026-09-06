@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FMCSA Data Analyzer — Inspections</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div data-topbar></div>
+<div class="app-shell">
+  <div data-sidebar></div>
+  <div class="main-content">
+<div class="page">
+  <div id="back"></div>
+
+  <div style="display:flex; align-items:flex-end; justify-content:space-between; flex-wrap:wrap; gap:12px;">
+    <div>
+      <h1 style="margin:0 0 4px 0; font-size:24px; font-weight:700;">Inspections</h1>
+      <div style="font-size:14px; color:#52514e;">Roadside inspection volume over time — click a bar to zoom in</div>
+    </div>
+    <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+      <select id="state-filter" class="select" style="min-width:170px; padding:7px 10px; font-size:13px;">
+        <option value="">All states</option>
+      </select>
+      <div class="segmented" id="range-switch">
+        <button data-range="day">Day</button>
+        <button data-range="week">Week</button>
+        <button data-range="month" class="active">Month</button>
+        <button data-range="year">Year</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="padding:10px 16px; display:flex; align-items:center; gap:14px;">
+    <button type="button" class="btn" id="nav-prev" style="padding:6px 12px; font-size:15px;" aria-label="Previous period">‹</button>
+    <div id="period-label" style="font-size:13.5px; font-weight:600; min-width:180px; text-align:center;"></div>
+    <button type="button" class="btn" id="nav-next" style="padding:6px 12px; font-size:15px;" aria-label="Next period">›</button>
+    <button type="button" class="btn" id="nav-today" style="padding:6px 14px; font-size:13px;">Today</button>
+  </div>
+
+  <div id="tiles" style="display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:16px;"></div>
+
+  <div class="card" style="padding:22px 24px; display:flex; flex-direction:column; gap:14px;">
+    <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;">
+      <div id="chart-title" style="font-size:14px; font-weight:600;">By day</div>
+      <span style="display:flex; align-items:center; gap:12px; font-size:11px; color:#898781;">
+        <span style="display:flex; align-items:center; gap:5px;"><span style="width:9px; height:9px; border-radius:2px; background:#2a78d6; display:inline-block;"></span>inspections</span>
+        <span style="display:flex; align-items:center; gap:5px;"><span style="width:9px; height:2px; background:#d03b3b; display:inline-block;"></span>ELD tampering</span>
+      </span>
+    </div>
+    <div id="chart"></div>
+  </div>
+
+  <div class="card" style="overflow:hidden;">
+    <div style="padding:16px 20px; border-bottom:1px solid #e1e0d9; font-size:14px; font-weight:600;" id="table-title">Carriers inspected</div>
+    <table>
+      <thead>
+        <tr>
+          <th><span class="th-sort" data-sort="name">Company</span></th>
+          <th>DOT</th>
+          <th><span class="th-sort active" data-sort="count">Inspections</span></th>
+          <th><span class="th-sort" data-sort="oos">OOS</span></th>
+          <th><span class="th-sort" data-sort="tamperings">Tampering</span></th>
+          <th><span class="th-sort" data-sort="score">Score</span></th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="carrier-rows"></tbody>
+    </table>
+    <div id="carrier-count" style="padding:12px 18px; font-size:11.5px; color:#898781; border-top:1px solid #e1e0d9;"></div>
+  </div>
+</div>
+
+  </div>
+</div>
+
+<script src="js/data.js"></script>
+<script src="js/app.js"></script>
+<script>
+  document.getElementById('back').innerHTML = breadcrumb([
+    { label: 'Dashboard', href: 'index.html' },
+    { label: 'Inspections' },
+  ]);
+
+  const stateFilterEl = document.getElementById('state-filter');
+  stateFilterEl.innerHTML = '<option value="">All states</option>' +
+    US_STATES.map(([code, name]) => `<option value="${code}">${code} — ${name}</option>`).join('');
+
+  let range = 'month';
+  let cursor = new Date();
+  let stateCode = '';
+  let sortField = 'count';
+  let sortDir = -1;
+
+  function iso(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
+  function startOfWeek(d) { const x = new Date(d); const dow = (x.getDay() + 6) % 7; x.setDate(x.getDate() - dow); return x; }
+
+  function windowFor(r, c) {
+    if (r === 'day') {
+      return { from: iso(c), to: iso(c), granularity: 'hour',
+        label: c.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }) };
+    }
+    if (r === 'week') {
+      const s = startOfWeek(c); const e = new Date(s); e.setDate(e.getDate() + 6);
+      return { from: iso(s), to: iso(e), granularity: 'day',
+        label: `${s.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })} – ${e.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}` };
+    }
+    if (r === 'month') {
+      const s = new Date(c.getFullYear(), c.getMonth(), 1); const e = new Date(c.getFullYear(), c.getMonth() + 1, 0);
+      return { from: iso(s), to: iso(e), granularity: 'day', label: c.toLocaleDateString(undefined, { month: 'long', year: 'numeric' }) };
+    }
+    const s = new Date(c.getFullYear(), 0, 1); const e = new Date(c.getFullYear(), 11, 31);
+    return { from: iso(s), to: iso(e), granularity: 'month', label: String(c.getFullYear()) };
+  }
+
+  function step(r, c, dir) {
+    const d = new Date(c);
+    if (r === 'day') d.setDate(d.getDate() + dir);
+    else if (r === 'week') d.setDate(d.getDate() + 7 * dir);
+    else if (r === 'month') d.setMonth(d.getMonth() + dir);
+    else d.setFullYear(d.getFullYear() + dir);
+    return d;
+  }
+
+  function renderChart(buckets) {
+    const w = 760, h = 190, pad = 6;
+    const maxCount = Math.max(1, ...buckets.map(b => b.count));
+    const n = buckets.length;
+    const bw = (w - pad * 2) / n;
+    const bars = buckets.map((b, i) => {
+      const bh = (b.count / maxCount) * (h - 26);
+      const x = pad + i * bw;
+      const y = h - 20 - bh;
+      const tamperH = Math.max(0, (b.tamperings / maxCount) * (h - 26));
+      const tamperY = h - 20 - tamperH;
+      const showLabel = n <= 14 || i % Math.ceil(n / 14) === 0;
+      return `
+        <g data-key="${b.key}" class="insp-bar" style="cursor:${range === 'day' ? 'default' : 'pointer'};">
+          <rect x="${(x + 1).toFixed(1)}" y="${y.toFixed(1)}" width="${Math.max(1, bw - 2).toFixed(1)}" height="${Math.max(0, bh).toFixed(1)}" fill="#2a78d6" rx="1"></rect>
+          ${b.tamperings > 0 ? `<rect x="${(x + 1).toFixed(1)}" y="${tamperY.toFixed(1)}" width="${Math.max(1, bw - 2).toFixed(1)}" height="2" fill="#d03b3b"></rect>` : ''}
+          ${showLabel ? `<text x="${(x + bw / 2).toFixed(1)}" y="${h - 6}" text-anchor="middle" font-size="9" fill="#898781">${b.label}</text>` : ''}
+        </g>`;
+    }).join('');
+    return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}">
+        <line x1="0" y1="${h - 20}" x2="${w}" y2="${h - 20}" stroke="#e1e0d9" stroke-width="1"/>
+        ${bars}
+      </svg>`;
+  }
+
+  function bindChartClicks(win) {
+    if (range === 'day') return;
+    document.querySelectorAll('.insp-bar').forEach(g => {
+      g.addEventListener('click', () => {
+        const key = g.dataset.key;
+        const bucket = (window.__inspBuckets || []).find(b => b.key === key);
+        if (!bucket || !bucket.start) return;
+        const d = new Date(bucket.start + 'T00:00:00');
+        if (range === 'year') { range = 'month'; cursor = d; }
+        else { range = 'day'; cursor = d; }
+        document.querySelectorAll('#range-switch button').forEach(b => b.classList.toggle('active', b.dataset.range === range));
+        render();
+      });
+    });
+  }
+
+  function render() {
+    const win = windowFor(range, cursor);
+    const series = buildInspectionSeries(win.granularity, win.from, win.to, stateCode);
+    window.__inspBuckets = series.buckets;
+
+    document.getElementById('period-label').textContent = win.label;
+    const isFuture = windowFor(range, new Date()).from <= win.from;
+    document.getElementById('nav-next').disabled = isFuture;
+
+    document.getElementById('tiles').innerHTML = `
+      <div class="card" style="padding:20px;">
+        <div style="font-size:13px; color:#52514e; margin-bottom:10px;">Inspections</div>
+        <div class="mono" style="font-size:28px; font-weight:600;">${series.total.toLocaleString()}</div>
+        <div style="font-size:12px; color:#898781; margin-top:6px;">${stateCode || 'all states'} · ${win.label}</div>
+      </div>
+      <div class="card" style="padding:20px;">
+        <div style="font-size:13px; color:#52514e; margin-bottom:10px;">Out of service</div>
+        <div class="mono" style="font-size:28px; font-weight:600;">${series.oosTotal.toLocaleString()}</div>
+        <div style="font-size:12px; color:#898781; margin-top:6px;">${series.total ? (series.oosTotal / series.total * 100).toFixed(1) : '0.0'}% of inspections</div>
+      </div>
+      <div class="card" style="padding:20px;">
+        <div style="font-size:13px; color:#52514e; margin-bottom:10px;">ELD tampering</div>
+        <div class="mono" style="font-size:28px; font-weight:600;">${series.tamperingsTotal.toLocaleString()}</div>
+        <div style="font-size:12px; color:#898781; margin-top:6px;">inspections with a tampering finding</div>
+      </div>
+      <div class="card" style="padding:20px;">
+        <div style="font-size:13px; color:#52514e; margin-bottom:10px;">Carriers inspected</div>
+        <div class="mono" style="font-size:28px; font-weight:600;">${series.carriers.length.toLocaleString()}</div>
+        <div style="font-size:12px; color:#898781; margin-top:6px;">with 1+ inspection</div>
+      </div>`;
+
+    document.getElementById('chart-title').textContent = range === 'day' ? 'By hour' : range === 'year' ? 'By month' : 'By day';
+    document.getElementById('chart').innerHTML = renderChart(series.buckets);
+    bindChartClicks(win);
+
+    document.getElementById('table-title').textContent = `Carriers inspected · ${stateCode || 'all states'} · ${win.label}`;
+
+    let rows = [...series.carriers];
+    rows.sort((a, b) => {
+      let av = a[sortField], bv = b[sortField];
+      if (typeof av === 'string') return av.localeCompare(bv) * sortDir;
+      return (av - bv) * sortDir;
+    });
+
+    const rowsEl = document.getElementById('carrier-rows');
+    if (!rows.length) {
+      rowsEl.innerHTML = `<tr><td colspan="7"><div class="empty-state">No inspections in this window${stateCode ? ` for ${stateCode}` : ''}.</div></td></tr>`;
+    } else {
+      rowsEl.innerHTML = rows.map(c => `
+        <tr class="row-link" onclick="location.href='company.html?dot=${c.dot}'">
+          <td style="font-weight:600;">${c.name}</td>
+          <td class="mono" style="color:#52514e;">${c.dot}</td>
+          <td class="mono">${c.count}</td>
+          <td class="mono">${c.oos}</td>
+          <td class="mono">${c.tamperings > 0 ? `<span style="color:#d03b3b; font-weight:600;">${c.tamperings}</span>` : '0'}</td>
+          <td>${scorePill(c.score, c.hasDetail)}</td>
+          <td><a href="company.html?dot=${c.dot}">Company →</a></td>
+        </tr>`).join('');
+    }
+    document.getElementById('carrier-count').textContent = rows.length ? `${rows.length} carrier${rows.length === 1 ? '' : 's'} with 1+ inspection` : '';
+  }
+
+  document.querySelectorAll('#range-switch button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      range = btn.dataset.range;
+      document.querySelectorAll('#range-switch button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      render();
+    });
+  });
+  document.getElementById('nav-prev').addEventListener('click', () => { cursor = step(range, cursor, -1); render(); });
+  document.getElementById('nav-next').addEventListener('click', () => { cursor = step(range, cursor, 1); render(); });
+  document.getElementById('nav-today').addEventListener('click', () => { cursor = new Date(); render(); });
+  stateFilterEl.addEventListener('change', () => { stateCode = stateFilterEl.value; render(); });
+
+  document.querySelectorAll('.th-sort').forEach(el => {
+    el.innerHTML += ' ' + icon(ICONS.sort, { size: 11, stroke: '#0b0b0b', sw: 2.5 });
+    el.addEventListener('click', () => {
+      const field = el.dataset.sort;
+      if (sortField === field) sortDir *= -1; else { sortField = field; sortDir = -1; }
+      document.querySelectorAll('.th-sort').forEach(e => e.classList.remove('active'));
+      el.classList.add('active');
+      render();
+    });
+  });
+
+  render();
+</script>
+</body>
+</html>

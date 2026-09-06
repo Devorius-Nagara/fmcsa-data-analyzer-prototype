@@ -124,6 +124,8 @@ tr.row-link:hover { background: #f4f3f0; }
   font-size: 14px; font-weight: 600; border: 1px solid rgba(11,11,11,0.14); background: #fcfcfb; color: #0b0b0b; cursor: pointer;
 }
 .btn:hover { background: #f4f3f0; }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn:disabled:hover { background: #fcfcfb; }
 
 select.select, input.select {
   display: flex; align-items: center; padding: 9px 12px; border: 1px solid rgba(11,11,11,0.14);

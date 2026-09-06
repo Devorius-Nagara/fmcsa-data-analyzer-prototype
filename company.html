@@ -22,11 +22,11 @@
   const dot = qs('dot') || COMPANIES[0].dot;
   const c = getCompany(dot) || COMPANIES[0];
   const provider = getProvider(c.provider);
-  const tier = scoreTier(c.score);
-  const tierColor = { Minimal: '#0ca30c', Elevated: '#fab219', Critical: '#d03b3b' }[tier.label];
-  const tierIcon = { Minimal: ICONS.check, Elevated: ICONS.warn, Critical: ICONS.warn }[tier.label];
+  const hasScore = c.hasDetail;
+  const tier = hasScore ? scoreTier(c.score) : null;
+  const tierColor = tier ? { Minimal: '#0ca30c', Elevated: '#fab219', Critical: '#d03b3b' }[tier.label] : '#898781';
+  const tierIcon = tier ? { Minimal: ICONS.check, Elevated: ICONS.warn, Critical: ICONS.warn }[tier.label] : ICONS.warn;
 
-  const tickets = TICKETS[c.dot] || [];
   const uploads = UPLOADS[c.dot] || [];
   const inspections = getInspectionsForCompany(c.dot);
   const violations = getViolationsForCompany(c.dot);
@@ -35,19 +35,28 @@
   const smsBasics = SMS_BASICS[c.dot] || [];
   const scoreHistory = SCORE_HISTORY[c.dot] || [];
 
+  /* Date-range filter state, shared by the date-bearing tabs. */
+  let rangeFrom = '', rangeTo = '';
+  function inRange(dateStr) {
+    if (rangeFrom && dateStr < rangeFrom) return false;
+    if (rangeTo && dateStr > rangeTo) return false;
+    return true;
+  }
+  const DATE_TABS = new Set(['inspections', 'violations', 'crashes', 'uploads']);
+
   /* center (90,100), radius 76, semicircle from (14,100) at 0 to (166,100) at 100 */
   function gaugeArcEnd(score) {
     const f = Math.max(0, Math.min(1, score / 100));
     const angle = f * Math.PI;
     return { x: (90 - 76 * Math.cos(angle)).toFixed(1), y: (100 - 76 * Math.sin(angle)).toFixed(1) };
   }
-  const end = gaugeArcEnd(c.score);
+  const end = hasScore ? gaugeArcEnd(c.score) : { x: 14, y: 100 };
 
   function bar(label, value, display) {
     return `
       <div>
         <div style="display:flex; justify-content:space-between; font-size:11.5px; margin-bottom:4px;"><span>${label}</span><span class="mono">${display}</span></div>
-        <div class="rank-track" style="height:6px;"><div class="rank-fill" style="width:${value}%; background:#2a78d6;"></div></div>
+        <div class="rank-track" style="height:6px;"><div class="rank-fill" style="width:${Math.min(100, value)}%; background:#2a78d6;"></div></div>
       </div>`;
   }
 
@@ -59,8 +68,16 @@
     return `<button type="button" class="copy-btn" data-copy="${text}" title="Copy" onclick="event.stopPropagation(); copyToClipboard(this)">${icon(ICONS.copy, { size: 12.5, stroke: '#898781', sw: 2 })}</button>`;
   }
 
+  function uploadPillFor(status) {
+    if (status === 'none') return `<span style="color:#c3c2b7;">—</span>`;
+    return `<span class="pill ${status === 'success' ? 'pill-minimal' : 'pill-critical'}" style="font-size:10.5px; padding:2px 8px;">${status === 'success' ? 'Yes' : 'Failed'}</span>`;
+  }
+
   function vehicleMeta(v, date, dot) {
-    const upload = uploadOnDate(dot, date);
+    if (!v) {
+      return `<div style="font-size:12px; color:#898781; min-width:220px;">No FMCSA unit data on this stop (Trackensure roadside ticket only).</div>`;
+    }
+    const upload = uploadRecordOnDate(dot, date);
     return `
       <div style="display:flex; flex-direction:column; gap:5px; font-size:12px; color:#52514e; min-width:220px;">
         <div>Truck <b style="color:#0b0b0b;">${v.truckNumber}</b> <span class="mono" style="color:#0b0b0b;">${v.truckVin}</span> ${copyBtn(v.truckVin)}</div>
@@ -71,32 +88,49 @@
       </div>`;
   }
 
+  function ticketMeta(i) {
+    if (i.source !== 'fmcsa+te' && i.source !== 'te') return '';
+    return `
+      <div style="font-size:12px; color:#52514e; min-width:220px; padding-left:16px; border-left:1px solid #e1e0d9;">
+        <div style="font-weight:600; color:#0b0b0b; margin-bottom:4px;">Trackensure roadside ticket</div>
+        ${i.patrol ? `<div>Patrol: <b style="color:#0b0b0b;">${i.patrol}</b></div>` : ''}
+        ${i.inspectorName ? `<div style="margin-top:3px;">Inspector: <b style="color:#0b0b0b;">${i.inspectorName}</b>${i.inspectorBadge ? ` <span class="mono">(${i.inspectorBadge})</span>` : ''}</div>` : ''}
+        ${i.federalPending ? `<div style="margin-top:6px;"><span class="pill pill-elevated" style="font-size:10.5px; padding:2px 8px;">${icon(ICONS.clock, { size: 10, stroke: '#946400', sw: 2.5 })} Pending federal record</span></div>` : ''}
+        ${i.reportDetails ? `<div style="margin-top:6px; color:#898781;">${i.reportDetails}</div>` : ''}
+      </div>`;
+  }
+
   // ---------- Inspections tab (expandable rows) ----------
   function inspectionsPanel() {
-    if (!inspections.length) return `<div class="empty-state">No inspection records in this demo dataset.</div>`;
+    if (!inspections.length) return `<div class="empty-state">No inspection records on file for this carrier.</div>`;
+    const rows = inspections.filter(i => inRange(i.date));
+    if (!rows.length) return `<div class="empty-state">No inspections in the selected date range.</div>`;
     return `
       <table>
-        <thead><tr><th style="width:24px;"></th><th>Date</th><th>Level</th><th>State</th><th>Violations</th><th>Tampering</th><th>OOS</th></tr></thead>
+        <thead><tr><th style="width:24px;"></th><th>Date</th><th>Level</th><th>State</th><th>Violations</th><th>Upload</th><th>Tampering</th><th>OOS</th></tr></thead>
         <tbody>
-          ${inspections.map(i => `
+          ${rows.map(i => `
           <tr class="exp-row" data-toggle="insp-${i.id}">
             <td>${chev(false)}</td>
             <td class="mono" style="color:#52514e;">${fmtDate(i.date)}</td>
             <td>${i.level}</td>
             <td>${i.state}</td>
             <td class="mono">${i.violations.length}</td>
+            <td>${uploadPillFor(uploadOnDate(i.dot, i.date))}</td>
             <td>${tamperingPill(i)}</td>
             <td><span class="pill ${i.oos ? 'pill-critical' : 'pill-minimal'}">${i.oos ? 'Yes' : 'No'}</span></td>
           </tr>
           <tr class="exp-panel-row" id="panel-insp-${i.id}" hidden>
-            <td colspan="7">
+            <td colspan="8">
               <div class="exp-panel-inner">
                 <div style="display:flex; gap:28px; flex-wrap:wrap;">
                   <div style="font-size:12px; color:#52514e; min-width:180px;">
                     <div>Location: <b style="color:#0b0b0b;">${i.location}</b></div>
                     <div style="margin-top:5px;">Provider: <b style="color:#0b0b0b;">${provider ? provider.name : '—'}</b></div>
+                    ${i.federalPending ? `<div style="margin-top:6px;"><span class="pill pill-elevated" style="font-size:10.5px; padding:2px 8px;">${icon(ICONS.clock, { size: 10, stroke: '#946400', sw: 2.5 })} Pending federal record</span></div>` : ''}
                   </div>
                   ${vehicleMeta(i.vehicle, i.date, i.dot)}
+                  ${ticketMeta(i)}
                 </div>
                 ${i.violations.length ? `
                 <table style="font-size:12.5px;">
@@ -116,17 +150,20 @@
             </td>
           </tr>`).join('')}
         </tbody>
-      </table>`;
+      </table>
+      ${rows.length !== inspections.length ? `<div style="padding:10px 16px; font-size:11.5px; color:#898781; border-top:1px solid #e1e0d9;">${rows.length} of ${inspections.length} — date-filtered</div>` : ''}`;
   }
 
   // ---------- Violations tab (expandable lifecycle) ----------
   function violationsPanel() {
-    if (!violations.length) return `<div class="empty-state">No inspection or violation records in this demo dataset.</div>`;
+    if (!violations.length) return `<div class="empty-state">No inspection or violation records on file for this carrier.</div>`;
+    const rows = violations.filter(v => inRange(v.date));
+    if (!rows.length) return `<div class="empty-state">No violations in the selected date range.</div>`;
     return `
       <table>
         <thead><tr><th></th><th>Date</th><th>Type</th><th>Code</th><th>Severity</th><th>Source</th></tr></thead>
         <tbody>
-          ${violations.map(v => {
+          ${rows.map(v => {
             const isOfficial = v.source === 'official';
             return `
           <tr class="exp-row" data-toggle="viol-${v.id}">
@@ -156,53 +193,40 @@
           </tr>`;
           }).join('')}
         </tbody>
-      </table>`;
-  }
-
-  // ---------- Tickets tab ----------
-  function ticketsPanel() {
-    if (!c.hasDetail) return `<div class="empty-state">No detailed ticket history in this demo dataset for a non-flagship company.</div>`;
-    if (!tickets.length) return `<div class="empty-state">No support tickets on file for ${c.name}.</div>`;
-    return `
-      ${c.tickets !== null && c.tickets > tickets.length ? `<div class="notice">${icon(ICONS.warn, { size: 16, stroke: '#9c3d1c' })}<div class="text">This demo dataset shows ${tickets.length} sample ticket${tickets.length === 1 ? '' : 's'} out of ${c.tickets} on file.</div></div>` : ''}
-      <table>
-        <thead><tr><th>Subject</th><th>Status</th><th>Date opened</th></tr></thead>
-        <tbody>
-          ${tickets.map(t => `
-          <tr>
-            <td style="font-weight:600;">${t.subject}</td>
-            <td><span class="pill ${t.status === 'Open' ? 'pill-elevated' : 'pill-minimal'}">${t.status}</span></td>
-            <td class="mono" style="color:#52514e;">${fmtDate(t.date)}</td>
-          </tr>`).join('')}
-        </tbody>
-      </table>`;
+      </table>
+      ${rows.length !== violations.length ? `<div style="padding:10px 16px; font-size:11.5px; color:#898781; border-top:1px solid #e1e0d9;">${rows.length} of ${violations.length} — date-filtered</div>` : ''}`;
   }
 
   // ---------- Uploads tab ----------
   function uploadsPanel() {
-    if (!c.hasDetail) return `<div class="empty-state">No detailed upload log in this demo dataset for a non-flagship company.</div>`;
-    if (!uploads.length) return `<div class="empty-state">No FMCSA upload events on file for ${c.name}.</div>`;
+    if (!c.hasDetail) return `<div class="empty-state">FMCSA enrichment hasn't run for ${c.name} yet — no upload log.</div>`;
+    if (!uploads.length) return `<div class="empty-state">No ELD → FMCSA data transfers on file for ${c.name}.</div>`;
+    const rows = uploads.filter(u => inRange(u.datetime.slice(0, 10)));
+    if (!rows.length) return `<div class="empty-state">No uploads in the selected date range.</div>`;
     return `
       <table>
         <thead><tr><th>Date &amp; time</th><th>Truck</th><th>Status</th></tr></thead>
         <tbody>
-          ${uploads.map(u => `
+          ${rows.map(u => `
           <tr>
-            <td class="mono" style="color:#52514e;">${u.datetime.replace(' ', ', ')}</td>
+            <td class="mono" style="color:#52514e;">${fmtDateTime(u.datetime)}</td>
             <td class="mono">${u.truck}</td>
             <td><span class="pill ${u.status === 'success' ? 'pill-minimal' : 'pill-critical'}">${u.status === 'success' ? 'Success' : 'Failed — ' + u.note}</span></td>
           </tr>`).join('')}
         </tbody>
-      </table>`;
+      </table>
+      ${rows.length !== uploads.length ? `<div style="padding:10px 16px; font-size:11.5px; color:#898781; border-top:1px solid #e1e0d9;">${rows.length} of ${uploads.length} — date-filtered</div>` : ''}`;
   }
 
   // ---------- Crashes tab ----------
   function crashesPanel() {
-    if (!c.hasDetail) return `<div class="empty-state">No detailed crash records in this demo dataset for a non-flagship company.</div>`;
+    if (!c.hasDetail) return `<div class="empty-state">FMCSA enrichment hasn't run for ${c.name} yet — no crash data.</div>`;
     if (!crashes.length) return `<div class="empty-state">No crashes on file for ${c.name} in the last 24 months.</div>`;
+    const rows = crashes.filter(cr => inRange(cr.date));
+    if (!rows.length) return `<div class="empty-state">No crashes in the selected date range.</div>`;
     return `
       <div style="display:flex; flex-direction:column; gap:1px; background:#e1e0d9;">
-        ${crashes.map(cr => `
+        ${rows.map(cr => `
         <div class="card" style="border-radius:0; padding:12px 16px; display:flex; flex-direction:column; gap:6px;">
           <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
             <div style="font-weight:600; font-size:13px;">${fmtDate(cr.date)} ${cr.time} · ${cr.location}</div>
@@ -216,12 +240,13 @@
           <div style="font-size:12px; color:#52514e;">${cr.weather} · ${cr.lighting} · ${cr.surface}${cr.roadway ? ' · ' + cr.roadway : ''}</div>
           <div style="font-size:11.5px; color:#898781;">Sequence: ${cr.sequence} · Reported by ${cr.reportedBy}</div>
         </div>`).join('')}
-      </div>`;
+      </div>
+      ${rows.length !== crashes.length ? `<div style="padding:10px 16px; font-size:11.5px; color:#898781;">${rows.length} of ${crashes.length} — date-filtered</div>` : ''}`;
   }
 
   // ---------- Insurance tab ----------
   function insurancePanel() {
-    if (!c.hasDetail) return `<div class="empty-state">No detailed insurance history in this demo dataset for a non-flagship company.</div>`;
+    if (!c.hasDetail) return `<div class="empty-state">FMCSA enrichment hasn't run for ${c.name} yet — no insurance history.</div>`;
     if (!insuranceHistory.length) return `<div class="empty-state">No insurance filings on file for ${c.name}.</div>`;
     return `
       <div style="display:flex; flex-direction:column; gap:10px; padding:14px 16px;">
@@ -239,25 +264,26 @@
 
   // ---------- SMS BASIC tab ----------
   function smsBasicPanel() {
-    if (!c.hasDetail) return `<div class="empty-state">No official SMS BASIC data in this demo dataset for a non-flagship company.</div>`;
+    if (!c.hasDetail) return `<div class="empty-state">FMCSA enrichment hasn't run for ${c.name} yet — no SMS BASIC data.</div>`;
     if (!smsBasics.length) return `<div class="empty-state">No SMS BASIC data on file for ${c.name}.</div>`;
     return `
       <table>
-        <thead><tr><th>BASIC category</th><th>Measure</th><th>Inspections</th><th>Violations</th></tr></thead>
+        <thead><tr><th>BASIC category</th><th>Measure</th><th>Status</th><th>Inspections</th><th>Violations</th></tr></thead>
         <tbody>
           ${smsBasics.map(b => `
           <tr>
             <td style="font-weight:600;">${b.category}</td>
             <td class="mono">${b.measure.toFixed(2)}</td>
+            <td>${b.alert ? `<span class="pill pill-critical" style="font-size:10.5px; padding:2px 8px;">Alert</span>` : `<span style="color:#898781;">OK</span>`}</td>
             <td class="mono">${b.inspections}</td>
             <td class="mono">${b.violations}</td>
           </tr>`).join('')}
         </tbody>
       </table>
-      <div style="padding:12px 16px; font-size:11.5px; color:#898781; border-top:1px solid #e1e0d9;">Official FMCSA SMS measures — separate from the internal CarrierIntel-style score below.</div>`;
+      <div style="padding:12px 16px; font-size:11.5px; color:#898781; border-top:1px solid #e1e0d9;">FMCSA SMS BASIC measures &amp; alert flags — refreshed monthly. These are the inputs to the Safety Score.</div>`;
   }
 
-  // ---------- Risk score tab ----------
+  // ---------- Safety Score tab ----------
   function scoreTrendSvg() {
     if (scoreHistory.length < 2) return '';
     const w = 380, h = 70, pad = 4;
@@ -280,6 +306,7 @@
   }
 
   function riskScorePanel() {
+    if (!c.hasDetail) return `<div class="empty-state">FMCSA risk inputs haven't been ingested for ${c.name} yet — no score to show.</div>`;
     return `
       <div style="display:flex; flex-direction:column; gap:14px; padding:16px;">
         <div style="display:flex; justify-content:center;">
@@ -291,16 +318,17 @@
           </svg>
         </div>
         ${scoreTrendSvg()}
+        <div style="font-size:11px; color:#898781; text-align:center; margin-top:-8px;">monthly, following FMCSA's SMS run</div>
         <div style="display:flex; flex-direction:column; gap:10px; max-width:380px; margin:0 auto; width:100%;">
-          ${bar('OOS rate', Math.min(100, c.oosRate / 35 * 100), c.oosRate.toFixed(1) + '%')}
-          ${bar('Violations / inspection', Math.min(100, c.violPerInspection / 1.2 * 100), c.violPerInspection.toFixed(2))}
-          ${bar('Crash rate', Math.min(100, c.crashRate / 7 * 100), c.crashRate.toFixed(1) + '%')}
-          ${bar('Fatal crashes', Math.min(100, c.fatalCrashes / 1 * 90 + (c.fatalCrashes ? 10 : 0)), c.fatalCrashes + (c.fatalCrashes ? ' (12 mo)' : ''))}
-          ${bar('Data staleness', Math.min(100, c.dataStalenessDays / 20 * 100), c.dataStalenessDays + ' days')}
+          ${bar('OOS rate', c.oosRate / 35 * 100, c.oosRate.toFixed(1) + '%')}
+          ${bar('Violations / inspection', c.violPerInspection / 1.2 * 100, c.violPerInspection.toFixed(2))}
+          ${bar('Crash rate', c.crashRate / 7 * 100, c.crashRate.toFixed(1) + '%')}
+          ${bar('Fatal crashes', c.fatalCrashes * 90 + (c.fatalCrashes ? 10 : 0), c.fatalCrashes + (c.fatalCrashes ? ' (12 mo)' : ''))}
+          ${bar('Data staleness', c.dataStalenessDays / 20 * 100, c.dataStalenessDays + ' days')}
         </div>
         <div class="notice" style="max-width:460px; margin:0 auto;">
           ${icon(ICONS.warn, { size: 16, stroke: '#9c3d1c' })}
-          <div class="text"><b style="color:#0b0b0b;">Internal score, not the official FMCSA SMS score.</b> Calculated from preliminary (daily) data; the official snapshot publishes monthly.</div>
+          <div class="text"><b style="color:#0b0b0b;">Composite of FMCSA's 5 SMS BASIC measures + alert flags.</b> Higher = safer. Moves with FMCSA's monthly SMS run — the bars above are context stats (from daily inspection/crash data), not the score inputs. This is Trackensure's own internal heuristic, not the official FMCSA SMS score.</div>
         </div>
       </div>`;
   }
@@ -311,9 +339,8 @@
     { key: 'crashes', label: 'Crashes', count: c.hasDetail ? crashes.length : null, render: crashesPanel },
     { key: 'insurance', label: 'Insurance', count: c.hasDetail ? insuranceHistory.length : null, render: insurancePanel },
     { key: 'sms', label: 'SMS BASIC', count: c.hasDetail ? smsBasics.length : null, render: smsBasicPanel },
-    { key: 'tickets', label: 'Tickets', count: c.hasDetail ? tickets.length : null, render: ticketsPanel },
     { key: 'uploads', label: 'Uploads', count: c.hasDetail ? uploads.length : null, render: uploadsPanel },
-    { key: 'risk', label: 'Risk Score', count: null, render: riskScorePanel },
+    { key: 'risk', label: 'Safety Score', count: null, render: riskScorePanel },
   ];
 
   document.getElementById('page').innerHTML = `
@@ -336,24 +363,21 @@
             <span>DOT <span class="mono" style="color:#0b0b0b;">${c.dot}</span></span>
             <span>MC <span class="mono" style="color:#0b0b0b;">${c.mc}</span></span>
             <span>Provider: ${provider ? `<a href="provider.html?id=${provider.id}" style="font-weight:700;">${provider.name}</a>` : '—'}</span>
-            <span>Status: <b style="color:#0a6b0a;">${c.status}</b></span>
+            <span>Status: <b style="color:${c.status === 'Active' ? '#0a6b0a' : '#898781'};">${c.status}</b></span>
           </div>
         </div>
       </div>
       <div style="display:flex; align-items:center; gap:22px;">
         <div style="text-align:right;">
-          <div style="font-size:10px; color:#898781; text-transform:uppercase; letter-spacing:0.04em;">Tickets</div>
-          <div class="mono" style="font-size:15px; font-weight:600;">${c.tickets === null ? '—' : c.tickets}</div>
-        </div>
-        <div style="text-align:right;">
           <div style="font-size:10px; color:#898781; text-transform:uppercase; letter-spacing:0.04em;">Tamperings</div>
           <div class="mono" style="font-size:15px; font-weight:600;">${c.tamperings}</div>
         </div>
         <div style="text-align:right;">
-          <div style="font-size:10px; color:#898781; text-transform:uppercase; letter-spacing:0.04em;">Internal Risk Score</div>
+          <div style="font-size:10px; color:#898781; text-transform:uppercase; letter-spacing:0.04em;">Safety Score</div>
           <div style="display:flex; align-items:baseline; gap:6px; justify-content:flex-end;">
-            <span class="mono" style="font-size:20px; font-weight:600;">${c.score}</span>
-            <span class="pill ${tier.cls}">${icon(tierIcon, { size: 11, stroke: tierColor, sw: 2.5 })} ${tier.label}</span>
+            ${hasScore
+              ? `<span class="mono" style="font-size:20px; font-weight:600;">${c.score}</span><span class="pill ${tier.cls}">${icon(tierIcon, { size: 11, stroke: tierColor, sw: 2.5 })} ${tier.label}</span>`
+              : `<span class="pill pill-info">No data yet</span>`}
           </div>
         </div>
       </div>
@@ -386,12 +410,22 @@
 
     <div class="card" id="tabs-card" style="overflow:hidden;">
       <div class="tabs" id="tab-bar"></div>
+      <div id="tab-daterange" style="display:none; align-items:center; gap:10px; padding:10px 18px; border-bottom:1px solid #e1e0d9; font-size:12px; color:#52514e;">
+        <span>Date range</span>
+        <input type="date" id="range-from" class="select" style="padding:5px 8px; font-size:12.5px;">
+        <span>–</span>
+        <input type="date" id="range-to" class="select" style="padding:5px 8px; font-size:12.5px;">
+        <button type="button" class="btn" id="range-clear" style="padding:5px 10px; font-size:12px;">Clear</button>
+      </div>
       <div class="tab-panel" id="tab-panel"></div>
     </div>
   `;
 
   const tabBar = document.getElementById('tab-bar');
   const tabPanel = document.getElementById('tab-panel');
+  const dateRangeBar = document.getElementById('tab-daterange');
+  const rangeFromEl = document.getElementById('range-from');
+  const rangeToEl = document.getElementById('range-to');
 
   function renderTabBar(activeKey) {
     tabBar.innerHTML = TABS.map(t => `
@@ -415,14 +449,22 @@
 
   function selectTab(key) {
     renderTabBar(key);
+    dateRangeBar.style.display = DATE_TABS.has(key) ? 'flex' : 'none';
     const tab = TABS.find(t => t.key === key) || TABS[0];
     tabPanel.innerHTML = tab.render();
     bindExpandableRows();
   }
 
+  let activeTab = 'inspections';
   tabBar.addEventListener('click', (e) => {
     const btn = e.target.closest('.tab-btn');
-    if (btn) selectTab(btn.dataset.tab);
+    if (btn) { activeTab = btn.dataset.tab; selectTab(activeTab); }
+  });
+  rangeFromEl.addEventListener('change', () => { rangeFrom = rangeFromEl.value; selectTab(activeTab); });
+  rangeToEl.addEventListener('change', () => { rangeTo = rangeToEl.value; selectTab(activeTab); });
+  document.getElementById('range-clear').addEventListener('click', () => {
+    rangeFrom = ''; rangeTo = ''; rangeFromEl.value = ''; rangeToEl.value = '';
+    selectTab(activeTab);
   });
 
   selectTab('inspections');

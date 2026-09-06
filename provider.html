@@ -21,7 +21,7 @@
 <script>
   const id = qs('id') || PROVIDERS[0].id;
   const provider = getProvider(id) || PROVIDERS[0];
-  const companies = COMPANIES.filter(c => c.provider === provider.id);
+  const companies = COMPANIES.filter(c => c.provider === provider.id && c.active);
   const oosRate = companies.length ? (companies.reduce((s, c) => s + c.oosRate, 0) / companies.length).toFixed(1) : '0.0';
 
   const buckets = [
@@ -46,13 +46,13 @@
         </div>
         <div>
           <div style="font-size:20px; font-weight:700;">${provider.name}</div>
-          <div style="font-size:13px; color:#52514e; margin-top:6px;">ELD provider · ${companies.length} client compan${companies.length === 1 ? 'y' : 'ies'}</div>
+          <div style="font-size:13px; color:#52514e; margin-top:6px;">ELD provider · ${companies.length} active carrier${companies.length === 1 ? '' : 's'}</div>
         </div>
       </div>
       <div style="display:flex; gap:36px;">
         <div style="text-align:right;">
           <div style="font-size:11px; color:#898781; text-transform:uppercase; letter-spacing:0.04em;">Average score</div>
-          <div class="mono" style="font-size:26px; font-weight:600;">${provider.avgScore}</div>
+          <div class="mono" style="font-size:26px; font-weight:600;">${provider.avgScore > 0 ? provider.avgScore : '—'}</div>
         </div>
         <div style="text-align:right;">
           <div style="font-size:11px; color:#898781; text-transform:uppercase; letter-spacing:0.04em;">Tamperings (30d)</div>
@@ -81,7 +81,7 @@
       <div style="padding:20px 24px; border-bottom:1px solid #e1e0d9; font-size:14px; font-weight:600;">Companies on ${provider.name}</div>
       ${companies.length ? `
       <table>
-        <thead><tr><th>Company</th><th>DOT</th><th>Score</th><th>Tickets</th><th>Tamperings</th><th></th></tr></thead>
+        <thead><tr><th>Company</th><th>DOT</th><th>Score</th><th>Tamperings</th><th></th></tr></thead>
         <tbody>
           ${companies.map(c => `
           <tr class="row-link" onclick="location.href='company.html?dot=${c.dot}'">
@@ -92,13 +92,12 @@
               </div>
             </td>
             <td class="mono" style="color:#52514e;">${c.dot}</td>
-            <td>${scorePill(c.score)}</td>
-            <td class="mono">${c.tickets === null ? '<span style="color:#c3c2b7;">—</span>' : c.tickets}</td>
+            <td>${scorePill(c.score, c.hasDetail)}</td>
             <td class="mono">${c.tamperings}</td>
             <td><a href="company.html?dot=${c.dot}">Company →</a></td>
           </tr>`).join('')}
         </tbody>
-      </table>` : `<div class="empty-state">No companies on this provider in the demo data.</div>`}
+      </table>` : `<div class="empty-state">No active carriers on this provider.</div>`}
     </div>
   `;
 </script>
